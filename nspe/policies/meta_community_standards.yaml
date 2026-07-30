@@ -1,0 +1,83 @@
+version: 1
+name: meta_community_standards_hate_speech
+source: https://transparency.meta.com/policies/community-standards/hate-speech/
+
+# This is our reading of Meta's PUBLIC Community Standards documents, not
+# an internal Meta policy artifact or enforcement system. Each rule below
+# carries a `cite` field naming the section it approximates.
+
+predicates:
+  - name: slur_present
+    kind: base
+    modality: text
+    description: "Text contains a recognized slur."
+  - name: dehumanizing_comparison
+    kind: base
+    modality: multimodal
+    description: "Content compares a person/group to non-human entities."
+  - name: targets_protected_group
+    kind: base
+    modality: multimodal
+    description: >
+      Target has a protected characteristic (race, ethnicity, national
+      origin, disability, religion, caste, sexual orientation, sex,
+      gender identity, or serious disease).
+  - name: educational_context
+    kind: base
+    modality: multimodal
+  - name: condemnation_context
+    kind: base
+    modality: text
+  - name: self_referential_use
+    kind: base
+    modality: text
+  - name: newsworthy
+    kind: base
+    modality: multimodal
+  - name: hate_speech_tier1
+    kind: derived
+  - name: remove
+    kind: verdict
+  - name: escalate
+    kind: verdict
+
+rules:
+  - id: HS_T1_SLUR
+    head: hate_speech_tier1
+    body:
+      - slur_present
+      - targets_protected_group
+    unless:
+      - condemnation_context
+      - educational_context
+      - self_referential_use
+    confidence: 0.95
+    cite: "Hate Speech, Tier 1"
+
+  - id: HS_T1_DEHUMANIZE
+    head: hate_speech_tier1
+    body:
+      - dehumanizing_comparison
+      - targets_protected_group
+    unless:
+      - educational_context
+    confidence: 0.90
+    cite: "Hate Speech, Tier 1"
+
+  - id: REMOVE_HS
+    head: remove
+    body:
+      - hate_speech_tier1
+    unless:
+      - newsworthy
+    confidence: 1.0
+    cite: "Newsworthy allowance"
+
+  - id: ESCALATE_AMBIGUOUS
+    head: escalate
+    body:
+      - hate_speech_tier1
+    unless:
+      - remove
+    confidence: 0.8
+    cite: "Ambiguous-case escalation (illustrative)"
