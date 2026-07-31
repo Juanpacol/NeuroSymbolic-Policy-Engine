@@ -96,6 +96,8 @@ def train_model(
             best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
 
     if checkpoint_path is not None and best_state is not None:
+        checkpoint_path = Path(checkpoint_path)
+        checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
         torch.save(best_state, checkpoint_path)
 
     return {
