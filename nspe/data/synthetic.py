@@ -53,7 +53,7 @@ def make_layered_policy(
             else num_rules - rules_per_layer * (num_layers - 1)
         )
         for j in range(max(1, n_rules_here)):
-            name = f"L{layer_i}_{j}"
+            name = f"l{layer_i}_{j}"
             if name not in this_layer:
                 predicates.append(Predicate(name, kind))
                 this_layer.append(name)
