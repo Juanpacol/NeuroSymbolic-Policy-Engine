@@ -14,6 +14,38 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 
 
+def _clip_fused_embedding(
+    clip: nn.Module, tokenizer: object, images: Tensor, texts: list[str]
+) -> Tensor:
+    """Encodes preprocessed images and raw text into a fused CLIP embedding.
+
+    Shared by :class:`NeuroSymbolicLayer` and
+    :class:`~nspe.baselines.neural_classifier.NeuralBaselineClassifier` so
+    both consume the exact same frozen-CLIP feature path -- the H1/H3
+    comparison is only fair if the two models differ solely in what sits
+    on top of these features, not in how the features themselves are
+    computed.
+
+    Args:
+        clip: a frozen ``open_clip`` model exposing ``encode_image`` and
+            ``encode_text``.
+        tokenizer: the ``open_clip`` tokenizer matching ``clip``.
+        images: preprocessed image batch, shape ``(batch, 3, H, W)``.
+        texts: one caption/text string per image, length ``batch``.
+
+    Returns:
+        L2-normalized, concatenated image+text embeddings, shape
+        ``(batch, 2 * embed_dim)``.
+    """
+    with torch.no_grad():
+        image_features = clip.encode_image(images)
+        tokens = tokenizer(texts).to(images.device)
+        text_features = clip.encode_text(tokens)
+    image_features = F.normalize(image_features, dim=-1)
+    text_features = F.normalize(text_features, dim=-1)
+    return torch.cat([image_features, text_features], dim=-1)
+
+
 class NeuroSymbolicLayer(nn.Module):
     """Maps (image, text) pairs to base predicate truth degrees.
 
@@ -85,13 +117,7 @@ class NeuroSymbolicLayer(nn.Module):
             L2-normalized, concatenated image+text embeddings, shape
             ``(batch, 2 * embed_dim)``.
         """
-        with torch.no_grad():
-            image_features = self.clip.encode_image(images)
-            tokens = self.tokenizer(texts).to(images.device)
-            text_features = self.clip.encode_text(tokens)
-        image_features = F.normalize(image_features, dim=-1)
-        text_features = F.normalize(text_features, dim=-1)
-        return torch.cat([image_features, text_features], dim=-1)
+        return _clip_fused_embedding(self.clip, self.tokenizer, images, texts)
 
     def forward(self, images: Tensor, texts: list[str]) -> Tensor:
         """Produces base predicate truth degrees for a batch.

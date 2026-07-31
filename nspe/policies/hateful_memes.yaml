@@ -1,0 +1,91 @@
+version: 1
+name: hateful_memes_policy
+source: https://transparency.meta.com/policies/community-standards/hate-speech/
+
+# A policy purpose-built to align with the Hateful Memes Challenge's binary
+# hateful / not-hateful label, for the H1/H3 evaluation pipeline. Predicates
+# and rules marked with a `cite` pointing at "Hate Speech, Tier 1" are reused
+# verbatim from meta_community_standards.yaml, since Hateful Memes was
+# explicitly constructed to probe the same hate-speech criteria; predicates
+# with no such precedent are new and meme-specific.
+
+predicates:
+  - name: slur_present
+    kind: base
+    modality: text
+    description: "Text contains a recognized slur."
+  - name: targets_protected_group
+    kind: base
+    modality: multimodal
+    description: >
+      Target has a protected characteristic (race, ethnicity, national
+      origin, disability, religion, caste, sexual orientation, sex,
+      gender identity, or serious disease).
+  - name: dehumanizing_comparison
+    kind: base
+    modality: multimodal
+    description: "Content compares a person/group to non-human entities."
+  - name: condemnation_context
+    kind: base
+    modality: text
+    description: "Content quotes or condemns hate speech rather than using it."
+  - name: mocking_tone
+    kind: base
+    modality: multimodal
+    description: >
+      Content frames its target with a derisive/mocking tone, independent
+      of an explicit slur or dehumanizing comparison.
+  - name: benign_context
+    kind: base
+    modality: multimodal
+    description: >
+      Content is educational, newsworthy, or otherwise clearly non-hateful
+      in intent (collapses meta_community_standards.yaml's separate
+      educational_context and newsworthy predicates into one, since Hateful
+      Memes does not distinguish those two cases).
+  - name: hate_speech_signal
+    kind: derived
+  - name: hateful
+    kind: verdict
+
+rules:
+  - id: HM_SLUR
+    head: hate_speech_signal
+    body:
+      - slur_present
+      - targets_protected_group
+    unless:
+      - condemnation_context
+      - benign_context
+    confidence: 0.95
+    cite: "Hate Speech, Tier 1"
+
+  - id: HM_DEHUMANIZE
+    head: hate_speech_signal
+    body:
+      - dehumanizing_comparison
+      - targets_protected_group
+    unless:
+      - condemnation_context
+      - benign_context
+    confidence: 0.90
+    cite: "Hate Speech, Tier 1"
+
+  - id: HM_VERDICT_CORE
+    head: hateful
+    body:
+      - hate_speech_signal
+    unless:
+      - condemnation_context
+    confidence: 1.0
+    cite: "Hate Speech, Tier 1"
+
+  - id: HM_VERDICT_MOCKING
+    head: hateful
+    body:
+      - mocking_tone
+      - targets_protected_group
+    unless:
+      - condemnation_context
+    confidence: 0.7
+    cite: "Hateful Memes task definition (this policy)"

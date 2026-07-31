@@ -19,6 +19,7 @@ dependencies = [
 clip = ["open_clip_torch>=2.24", "pillow>=10.0"]
 data = ["datasets>=2.19", "huggingface_hub>=0.23", "pillow>=10.0"]
 bench = ["clingo>=5.7", "pandas>=2.0"]
+train = ["open_clip_torch>=2.24", "pillow>=10.0", "datasets>=2.19", "huggingface_hub>=0.23"]
 dev = [
     "pytest>=8.0",
     "ruff>=0.6",

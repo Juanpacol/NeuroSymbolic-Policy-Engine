@@ -11,3 +11,5 @@ dist/
 *.ipynb_checkpoints/
 .DS_Store
 bench_results/
+checkpoints/
+eval_results/
