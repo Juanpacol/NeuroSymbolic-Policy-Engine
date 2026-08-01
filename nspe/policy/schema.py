@@ -92,8 +92,7 @@ class Rule:
         """Validates confidence range and that the body is non-empty."""
         if not 0.0 <= self.confidence <= 1.0:
             raise ValueError(
-                f"Rule {self.id!r} confidence must be in [0, 1], "
-                f"got {self.confidence}"
+                f"Rule {self.id!r} confidence must be in [0, 1], got {self.confidence}"
             )
         if not self.body:
             raise ValueError(f"Rule {self.id!r} must have at least one body literal")
@@ -125,3 +124,24 @@ class Policy:
         if kind is None:
             return tuple(p.name for p in self.predicates)
         return tuple(p.name for p in self.predicates if p.kind == kind)
+
+    def predicate_descriptions(self, kind: str | None = None) -> dict[str, str]:
+        """Returns predicate name to description, filtered by ``kind``.
+
+        The compiler ignores descriptions, but they are the only
+        per-predicate supervision signal available for grounding a
+        neural predicate layer -- see
+        :meth:`~nspe.extractor.NeuroSymbolicLayer.init_heads_from_descriptions`.
+
+        Args:
+            kind: predicate kind to filter by, or ``None`` for all.
+
+        Returns:
+            A dict mapping predicate name to its description. Predicates
+            without one map to the empty string.
+        """
+        return {
+            p.name: p.description
+            for p in self.predicates
+            if kind is None or p.kind == kind
+        }

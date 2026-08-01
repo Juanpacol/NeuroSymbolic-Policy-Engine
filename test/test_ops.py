@@ -26,6 +26,25 @@ class TestLog1mexp(TestCase):
         got = log1mexp(log_x)
         self.assertTrue(torch.isfinite(got).all())
 
+    def test_gradient_is_finite_near_zero(self):
+        """A finite forward value is not enough.
+
+        ``torch.where`` evaluates both branches and its backward
+        multiplies the unselected one by zero, but ``0 * inf`` is NaN.
+        Near ``log_x = 0`` the large branch's ``log1p(-exp(log_x))``
+        rounds its input to exactly -1, so an unguarded implementation
+        returns a correct value with a NaN gradient -- which silently
+        destroys any training run where a predicate saturates.
+        """
+        for dtype in (torch.float32, torch.float64):
+            log_x = torch.tensor(
+                [-1e-12, -1e-8, -1e-4, -0.5, -30.0],
+                dtype=dtype,
+                requires_grad=True,
+            )
+            log1mexp(log_x).sum().backward()
+            self.assertTrue(torch.isfinite(log_x.grad).all())
+
     def test_is_involution_with_safe_log(self):
         # log(1 - (1 - x)) == log(x)
         x = torch.tensor([0.1, 0.5, 0.9, 0.999])

@@ -43,11 +43,18 @@ def log1mexp(log_x: Tensor) -> Tensor:
     """
     log_x = log_x.clamp(max=-1e-12)
     small = log_x > -_LOG_2
-    out = torch.empty_like(log_x)
+    # `torch.where` evaluates both branches, and its backward multiplies
+    # the unselected one by zero -- but `0 * inf` is NaN, not zero. At
+    # `log_x` near 0 the large branch computes `log1p(-exp(log_x))`,
+    # whose input rounds to exactly -1, giving -inf and poisoning the
+    # gradient of the branch that *was* selected. Feeding each branch a
+    # value it can handle keeps both finite, so only the selected
+    # branch's gradient survives.
+    threshold = torch.full_like(log_x, -_LOG_2)
     out = torch.where(
         small,
-        torch.log(-torch.expm1(log_x)),
-        torch.log1p(-torch.exp(log_x)),
+        torch.log(-torch.expm1(torch.where(small, log_x, threshold))),
+        torch.log1p(-torch.exp(torch.where(small, threshold, log_x))),
     )
     return out
 

@@ -98,6 +98,7 @@ def train_model(
     select_metric: str = "auroc",
     patience: int | None = 5,
     scheduler: str | None = "cosine",
+    max_grad_norm: float | None = 1.0,
     seed: int | None = 0,
     device: str = "cpu",
     checkpoint_path: str | Path | None = None,
@@ -132,6 +133,11 @@ def train_model(
         patience: stop after this many epochs without improvement, or
             ``None`` to always run all ``epochs``.
         scheduler: ``"cosine"`` for ``CosineAnnealingLR``, or ``None``.
+        max_grad_norm: gradient-norm clip, or ``None`` to disable.
+            Needed, not optional hygiene: a predicate saturating toward
+            1 makes ``d log(1 - mu) / d mu`` diverge, so every negated
+            occurrence of it produces an exploding gradient that drives
+            the heads to NaN within a few steps.
         seed: seed applied before training, or ``None`` to leave global
             RNG state alone.
         device: ``"cpu"``, ``"mps"``, or ``"cuda"``.
@@ -181,6 +187,8 @@ def train_model(
             if aux_loss_fn is not None:
                 loss = loss + aux_loss_fn(model, inputs, aux)
             loss.backward()
+            if max_grad_norm is not None:
+                torch.nn.utils.clip_grad_norm_(params, max_grad_norm)
             optimizer.step()
             running_loss += loss.item()
             num_batches += 1

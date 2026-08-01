@@ -44,8 +44,8 @@ class TestNeuralBaselineClassifier(TestCase):
         verdict = model(images, texts)
         verdict.sum().backward()
 
-        self.assertIsNotNone(model.head.weight.grad)
-        self.assertTrue((model.head.weight.grad.abs() > 0).any())
+        self.assertIsNotNone(model.head.heads.weight.grad)
+        self.assertTrue((model.head.heads.weight.grad.abs() > 0).any())
         self.assertTrue(all(p.grad is None for p in model.clip.parameters()))
 
 

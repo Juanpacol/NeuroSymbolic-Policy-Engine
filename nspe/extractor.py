@@ -1,10 +1,21 @@
-"""Neural predicate extractor: frozen CLIP + trainable per-predicate heads.
+"""Neural predicate extractor: frozen CLIP + trainable predicate heads.
 
-The only trainable parameters are the linear heads. CLIP stays frozen
-so the extractor is cheap to train (no backbone fine-tuning) and its
-image/text embeddings remain comparable across policies. Gradients
-still flow from a verdict, through the reasoner, through the heads --
-just not into CLIP itself.
+The only trainable parameters are the trunk, the heads and their
+scaling. CLIP stays frozen so the extractor is cheap to train (no
+backbone fine-tuning) and its image/text embeddings remain comparable
+across policies. Gradients still flow from a verdict, through the
+reasoner, through the heads -- just not into CLIP itself.
+
+Two design choices exist to stop the predicate layer collapsing. All
+heads read the same embedding and receive gradient from a single scalar
+verdict, with nothing in the loss pushing them apart, so they are free
+to become correlated copies of one label predictor: a run of this model
+produced only 5 distinct thresholded predicate signatures across 831
+cases, out of 64 possible. The residual zero-shot path gives each
+predicate a distinct, semantically grounded gradient path derived from
+its own natural-language definition in the policy, and the per-predicate
+logit scale gives the optimizer direct control over how sharply each
+predicate splits the batch.
 """
 
 from __future__ import annotations
@@ -12,6 +23,8 @@ from __future__ import annotations
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
+
+from nspe.trunk import PredicateHead
 
 
 def _clip_fused_embedding(
@@ -55,6 +68,16 @@ class NeuroSymbolicLayer(nn.Module):
             ``policy.predicate_names("base")``).
         model_name: an ``open_clip`` model architecture name.
         pretrained: an ``open_clip`` pretrained tag for ``model_name``.
+        hidden_dim: width of the shared :class:`~nspe.trunk.PredicateTrunk`.
+            ``0`` reproduces the linear-probe configuration.
+        dropout: trunk dropout probability.
+        mu_eps: half-width of the margin kept away from 0 and 1. The
+            reasoner floors truth degrees at ``eps`` and ``log1mexp``
+            clamps its input, so a head that saturates contributes
+            exactly zero gradient through every negated occurrence of
+            its predicate -- which, for predicates appearing only under
+            ``unless:``, is their only occurrence. Emitting a strictly
+            interior range keeps both clamps off the live path.
     """
 
     def __init__(
@@ -62,6 +85,9 @@ class NeuroSymbolicLayer(nn.Module):
         predicate_names: tuple[str, ...],
         model_name: str = "ViT-B-32-quickgelu",
         pretrained: str = "openai",
+        hidden_dim: int = 256,
+        dropout: float = 0.2,
+        mu_eps: float = 1e-4,
     ) -> None:
         super().__init__()
         import open_clip  # type: ignore[import-untyped]
@@ -79,9 +105,16 @@ class NeuroSymbolicLayer(nn.Module):
         self.preprocess = preprocess
         self.tokenizer = tokenizer
         self.predicate_names = predicate_names
+        self.mu_eps = mu_eps
 
-        embed_dim = self.clip.visual.output_dim
-        self.heads = nn.Linear(embed_dim * 2, len(predicate_names))
+        fused_dim = self.clip.visual.output_dim * 2
+        self.head = PredicateHead(
+            fused_dim,
+            len(predicate_names),
+            hidden_dim=hidden_dim,
+            dropout=dropout,
+            mu_eps=mu_eps,
+        )
 
     @classmethod
     def from_policy(
@@ -89,6 +122,9 @@ class NeuroSymbolicLayer(nn.Module):
         policy: object,
         model_name: str = "ViT-B-32-quickgelu",
         pretrained: str = "openai",
+        hidden_dim: int = 256,
+        dropout: float = 0.2,
+        init_from_descriptions: bool = True,
     ) -> NeuroSymbolicLayer:
         """Builds an extractor sized for a policy's base predicates.
 
@@ -97,13 +133,74 @@ class NeuroSymbolicLayer(nn.Module):
             model_name: an ``open_clip`` model architecture name.
             pretrained: an ``open_clip`` pretrained tag for
                 ``model_name``.
+            hidden_dim: width of the shared trunk.
+            dropout: trunk dropout probability.
+            init_from_descriptions: if ``True``, seed the zero-shot
+                residual path from each base predicate's
+                natural-language ``description`` in the policy.
 
         Returns:
             A :class:`NeuroSymbolicLayer` with one output per base
             predicate in ``policy``.
         """
         base_names = policy.predicate_names("base")  # type: ignore[attr-defined]
-        return cls(base_names, model_name=model_name, pretrained=pretrained)
+        layer = cls(
+            base_names,
+            model_name=model_name,
+            pretrained=pretrained,
+            hidden_dim=hidden_dim,
+            dropout=dropout,
+        )
+        if init_from_descriptions:
+            descriptions = policy.predicate_descriptions("base")  # type: ignore[attr-defined]
+            layer.init_heads_from_descriptions(descriptions)
+        return layer
+
+    @torch.no_grad()
+    def init_heads_from_descriptions(
+        self,
+        descriptions: dict[str, str],
+        prompt: str = "a meme where {}",
+    ) -> None:
+        """Seeds the zero-shot residual from policy predicate descriptions.
+
+        Encodes each predicate's natural-language definition with the
+        frozen CLIP text encoder and stores the L2-normalized result,
+        duplicated across the image and text halves of the fused
+        embedding. Each predicate therefore has a distinct, semantically
+        grounded contribution to its own logit from step 0, which breaks
+        the symmetry that otherwise lets every head converge on the same
+        direction. This is also the only per-predicate supervision
+        available at all: Hateful Memes carries no predicate labels, so
+        the grounding has to come from the policy text itself.
+
+        Predicates missing from ``descriptions``, or with an empty one,
+        keep a zero residual and rely solely on the learned head.
+
+        Args:
+            descriptions: predicate name to description text.
+            prompt: template wrapped around each description before
+                encoding, matching CLIP's caption-like training
+                distribution.
+        """
+        wanted = [
+            (i, descriptions.get(name, "").strip())
+            for i, name in enumerate(self.predicate_names)
+        ]
+        present = [(i, text) for i, text in wanted if text]
+        if not present:
+            return
+
+        weight = self.head.zero_shot_weight
+        tokens = self.tokenizer([prompt.format(t) for _, t in present]).to(
+            weight.device
+        )
+        features = F.normalize(self.clip.encode_text(tokens), dim=-1)
+        # The fused embedding is [image_half, text_half]; a description
+        # is a text query against both halves, so it is duplicated.
+        rows = torch.cat([features, features], dim=-1)
+        for row, (index, _) in enumerate(present):
+            weight[index] = rows[row].to(weight.dtype)
 
     def encode(self, images: Tensor, texts: list[str]) -> Tensor:
         """Encodes preprocessed images and raw text into a fused embedding.
@@ -134,9 +231,9 @@ class NeuroSymbolicLayer(nn.Module):
 
         Returns:
             Tensor of shape ``(batch, len(predicate_names))``, values in
-            ``(0, 1)``.
+            ``[mu_eps, 1 - mu_eps]``.
         """
-        return torch.sigmoid(self.heads(fused))
+        return self.head(fused)
 
     def forward(self, images: Tensor, texts: list[str]) -> Tensor:
         """Produces base predicate truth degrees for a batch.
@@ -148,7 +245,7 @@ class NeuroSymbolicLayer(nn.Module):
 
         Returns:
             Tensor of shape ``(batch, len(predicate_names))``, values in
-            ``(0, 1)``, suitable as ``mu0`` for
+            ``[mu_eps, 1 - mu_eps]``, suitable as ``mu0`` for
             :class:`~nspe.reasoner.PolicyKGReasoner`.
         """
         return self.forward_embedded(self.encode(images, texts))

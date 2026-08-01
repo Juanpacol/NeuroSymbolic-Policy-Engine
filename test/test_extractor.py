@@ -25,7 +25,28 @@ def _tiny_policy() -> Policy:
             Predicate("target", "base"),
             Predicate("remove", "verdict"),
         ),
-        rules=(Rule(id="R1", head="remove", body=(Literal("slur"), Literal("target"))),),
+        rules=(
+            Rule(id="R1", head="remove", body=(Literal("slur"), Literal("target"))),
+        ),
+    )
+
+
+def _described_policy() -> Policy:
+    """Like _tiny_policy, but with the descriptions the head init reads."""
+    return Policy(
+        name="described",
+        predicates=(
+            Predicate("slur", "base", description="Text contains a recognized slur."),
+            Predicate(
+                "target",
+                "base",
+                description="The target has a protected characteristic.",
+            ),
+            Predicate("remove", "verdict"),
+        ),
+        rules=(
+            Rule(id="R1", head="remove", body=(Literal("slur"), Literal("target"))),
+        ),
     )
 
 
@@ -65,9 +86,59 @@ class TestNeuroSymbolicLayer(TestCase):
         mu0 = extractor(images, texts)
         mu0.sum().backward()
 
-        self.assertIsNotNone(extractor.heads.weight.grad)
-        self.assertTrue((extractor.heads.weight.grad.abs() > 0).any())
+        self.assertIsNotNone(extractor.head.heads.weight.grad)
+        self.assertTrue((extractor.head.heads.weight.grad.abs() > 0).any())
         self.assertTrue(all(p.grad is None for p in extractor.clip.parameters()))
+
+    def test_description_init_gives_each_predicate_its_own_direction(self):
+        """The anti-collapse mechanism, checked at init.
+
+        Every head reads the same embedding and is supervised only by a
+        single scalar verdict, so without a distinguishing signal they
+        are free to converge on one direction -- which is what produced
+        5 distinct signatures across 831 cases.
+        """
+        from nspe.extractor import NeuroSymbolicLayer
+
+        policy = _described_policy()
+        extractor = NeuroSymbolicLayer.from_policy(policy)
+        weight = extractor.head.zero_shot_weight
+
+        self.assertTrue((weight.abs().sum(dim=-1) > 0).all())
+        normalized = torch.nn.functional.normalize(weight, dim=-1)
+        cosine = normalized @ normalized.T
+        off_diagonal = cosine[~torch.eye(len(weight), dtype=torch.bool)]
+        self.assertLess(off_diagonal.abs().max().item(), 0.95)
+
+    def test_predicates_without_a_description_keep_a_zero_residual(self):
+        from nspe.extractor import NeuroSymbolicLayer
+
+        # _tiny_policy declares no descriptions at all.
+        extractor = NeuroSymbolicLayer.from_policy(_tiny_policy())
+        self.assertEqual(
+            extractor.head.zero_shot_weight,
+            torch.zeros_like(extractor.head.zero_shot_weight),
+        )
+
+    def test_description_init_can_be_disabled(self):
+        from nspe.extractor import NeuroSymbolicLayer
+
+        extractor = NeuroSymbolicLayer.from_policy(
+            _described_policy(), init_from_descriptions=False
+        )
+        self.assertEqual(
+            extractor.head.zero_shot_weight,
+            torch.zeros_like(extractor.head.zero_shot_weight),
+        )
+
+    def test_logit_scale_receives_gradient(self):
+        from nspe.extractor import NeuroSymbolicLayer
+
+        extractor = NeuroSymbolicLayer.from_policy(_tiny_policy())
+        extractor(torch.rand(2, 3, 224, 224), ["a", "b"]).sum().backward()
+
+        self.assertIsNotNone(extractor.head.logit_scale.grad)
+        self.assertTrue((extractor.head.logit_scale.grad.abs() > 0).any())
 
 
 class TestPolicyEngine(TestCase):
@@ -93,7 +164,7 @@ class TestPolicyEngine(TestCase):
         self.assertEqual(out.verdicts["remove"].shape, (2,))
 
         out.verdicts["remove"].sum().backward()
-        self.assertIsNotNone(extractor.heads.weight.grad)
+        self.assertIsNotNone(extractor.head.heads.weight.grad)
         self.assertTrue(all(p.grad is None for p in extractor.clip.parameters()))
 
 

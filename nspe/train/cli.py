@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Callable
 
 import torch
 from torch import Tensor, nn
@@ -49,6 +50,12 @@ from nspe.train.cache import (
 )
 from nspe.train.dataset import collate_hateful_memes
 from nspe.train.loop import train_model
+from nspe.train.regularizers import (
+    activation_entropy_loss,
+    anchor_loss,
+    decorrelation_loss,
+    zero_shot_targets,
+)
 from nspe.train.seed import set_seed
 
 _VERDICT_NAME = "hateful"
@@ -83,22 +90,76 @@ def _baseline_forward_embedded(
 
 
 def _build_model(args: argparse.Namespace) -> tuple[nn.Module, object]:
-    """Builds the model under test and its CLIP preprocessing transform."""
+    """Builds the model under test and its CLIP preprocessing transform.
+
+    Both arms are sized from the same policy so their trunk and latent
+    predicate layer match exactly; only the aggregation differs.
+    """
+    policy = load_policy(args.policy)
+    num_predicates = len(policy.predicate_names("base"))
     calibrator = VerdictCalibrator()
+
     if args.model == "reasoner":
-        policy = load_policy(args.policy)
         extractor = NeuroSymbolicLayer.from_policy(
-            policy, model_name=args.clip_model, pretrained=args.clip_pretrained
+            policy,
+            model_name=args.clip_model,
+            pretrained=args.clip_pretrained,
+            hidden_dim=args.hidden_dim,
+            dropout=args.dropout,
+            init_from_descriptions=not args.no_description_init,
         )
-        reasoner = PolicyKGReasoner(policy, store_trace=False)
+        reasoner = PolicyKGReasoner(
+            policy,
+            store_trace=False,
+            learnable_confidence=args.learnable_confidence,
+        )
         engine = PolicyEngine(extractor, reasoner, calibrator=calibrator)
         return engine, extractor.preprocess
+
     model = NeuralBaselineClassifier(
         model_name=args.clip_model,
         pretrained=args.clip_pretrained,
+        num_predicates=num_predicates,
+        hidden_dim=args.hidden_dim,
+        dropout=args.dropout,
         calibrator=calibrator,
     )
     return model, model.preprocess
+
+
+def _make_aux_loss(
+    model: nn.Module, args: argparse.Namespace
+) -> Callable[[nn.Module, Tensor, object], Tensor] | None:
+    """Builds the anti-collapse auxiliary loss, or ``None`` if disabled.
+
+    Only applies to the reasoner arm: the baseline's latent units are
+    not predicates and carry no interpretability claim, so regularizing
+    them toward the policy's semantics would be meaningless.
+    """
+    if not isinstance(model, PolicyEngine):
+        return None
+    weights = (args.lambda_anchor, args.lambda_decorr, args.lambda_entropy)
+    if not any(w > 0 for w in weights):
+        return None
+
+    extractor = model.extractor
+
+    def aux(engine: nn.Module, inputs: Tensor, side: object) -> Tensor:
+        # The cached path hands over fused embeddings directly; the raw
+        # path hands over images that still need encoding.
+        fused = inputs if args.cache_dir is not None else extractor.encode(inputs, side)
+        mu0 = extractor.forward_embedded(fused)
+        loss = fused.sum() * 0.0
+        if args.lambda_anchor > 0:
+            targets = zero_shot_targets(fused, extractor.head.zero_shot_weight)
+            loss = loss + args.lambda_anchor * anchor_loss(mu0, targets)
+        if args.lambda_decorr > 0:
+            loss = loss + args.lambda_decorr * decorrelation_loss(mu0)
+        if args.lambda_entropy > 0:
+            loss = loss + args.lambda_entropy * activation_entropy_loss(mu0)
+        return loss
+
+    return aux
 
 
 def _encoder_of(model: nn.Module) -> nn.Module:
@@ -234,6 +295,35 @@ def main() -> None:
     parser.add_argument("--clip-model", default="ViT-L-14")
     parser.add_argument("--clip-pretrained", default="openai")
     parser.add_argument(
+        "--hidden-dim",
+        type=int,
+        default=256,
+        help="Shared trunk width. 0 reproduces the linear-probe ablation.",
+    )
+    parser.add_argument("--dropout", type=float, default=0.2)
+    parser.add_argument(
+        "--no-description-init",
+        action="store_true",
+        help="Skip seeding the zero-shot residual from the policy's "
+        "predicate descriptions (ablation).",
+    )
+    parser.add_argument(
+        "--learnable-confidence",
+        action="store_true",
+        help="Learn rule confidences instead of using the policy's "
+        "declared ones. Ablation only: the primary result should come "
+        "from the confidences the published policy actually states.",
+    )
+    parser.add_argument(
+        "--lambda-anchor",
+        type=float,
+        default=0.1,
+        help="Weight on the CLIP-description anchor loss. Too large and "
+        "the predicate layer degenerates into CLIP zero-shot.",
+    )
+    parser.add_argument("--lambda-decorr", type=float, default=0.05)
+    parser.add_argument("--lambda-entropy", type=float, default=0.02)
+    parser.add_argument(
         "--select-metric",
         default="auroc",
         choices=["auroc", "f1", "accuracy", "bce"],
@@ -297,6 +387,7 @@ def main() -> None:
         lr=args.lr,
         weight_decay=args.weight_decay,
         pos_weight=None if args.no_class_weight else pos_weight,
+        aux_loss_fn=_make_aux_loss(model, args),
         select_metric=args.select_metric,
         patience=args.patience,
         seed=args.seed,

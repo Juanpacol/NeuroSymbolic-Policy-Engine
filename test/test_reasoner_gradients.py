@@ -46,9 +46,7 @@ class TestGradcheckProduct(TestCase):
     def test_gradgradcheck_cpu_float64(self):
         policy = _chain_policy()
         reasoner = PolicyKGReasoner(policy, tnorm="product").double()
-        mu0 = torch.tensor(
-            [[0.4, 0.5, 0.7]], dtype=torch.float64, requires_grad=True
-        )
+        mu0 = torch.tensor([[0.4, 0.5, 0.7]], dtype=torch.float64, requires_grad=True)
 
         def fn(x):
             return reasoner(x).verdicts["v"]
@@ -76,7 +74,11 @@ class TestGradientFlowEveryLiteral(TestCase):
                 Predicate("c", "base"),
                 Predicate("v", "verdict"),
             ),
-            rules=(Rule(id="R1", head="v", body=(Literal("a"), Literal("b"), Literal("c"))),),
+            rules=(
+                Rule(
+                    id="R1", head="v", body=(Literal("a"), Literal("b"), Literal("c"))
+                ),
+            ),
         )
         reasoner = PolicyKGReasoner(policy, tnorm="godel")
         mu0 = torch.tensor([[0.9, 0.2, 0.6]], requires_grad=True)
@@ -97,12 +99,61 @@ class TestNoNanAtExtremes(TestCase):
         self.assertTrue(torch.isfinite(mu0.grad).all())
 
 
+def _exception_only_policy() -> Policy:
+    """A policy where ``guard`` appears only under ``unless:``."""
+    return Policy(
+        name="exception_only",
+        predicates=(
+            Predicate("a", "base"),
+            Predicate("guard", "base"),
+            Predicate("v", "verdict"),
+        ),
+        rules=(
+            Rule(
+                id="R1",
+                head="v",
+                body=(Literal("a"),),
+                unless=(Literal("guard"),),
+            ),
+        ),
+    )
+
+
+class TestExceptionOnlyPredicateGradients(TestCase):
+    """Predicates reachable only through negation must stay trainable.
+
+    Negation goes through ``log1mexp``, whose two-branch ``torch.where``
+    used to return a finite value with a NaN gradient near ``log_x = 0``,
+    and whose gradient diverges as a predicate saturates toward 1. For a
+    predicate appearing only under ``unless:``, that path is its only
+    source of gradient, so either failure silently freezes it for the
+    whole run.
+    """
+
+    def test_gradient_is_finite_and_nonzero_across_the_range(self):
+        reasoner = PolicyKGReasoner(_exception_only_policy(), tnorm="product")
+        guard_index = reasoner.rule_tensor.name_to_index["guard"]
+
+        for guard in (1e-4, 1e-3, 0.5, 1 - 1e-3, 1 - 1e-4):
+            mu0 = torch.tensor([[0.7, guard]], requires_grad=True)
+            reasoner(mu0).verdicts["v"].sum().backward()
+
+            grad = mu0.grad[0, guard_index]
+            self.assertTrue(torch.isfinite(grad), f"non-finite grad at {guard}")
+            self.assertNotEqual(grad.item(), 0.0, f"dead grad at {guard}")
+
+    def test_saturated_guard_does_not_poison_other_gradients(self):
+        reasoner = PolicyKGReasoner(_exception_only_policy(), tnorm="product")
+        mu0 = torch.tensor([[0.7, 1.0 - 1e-7]], requires_grad=True)
+        reasoner(mu0).verdicts["v"].sum().backward()
+
+        self.assertTrue(torch.isfinite(mu0.grad).all())
+
+
 class TestLearnableConfidence(TestCase):
     def test_rule_confidence_receives_gradient(self):
         policy = _chain_policy()
-        reasoner = PolicyKGReasoner(
-            policy, tnorm="product", learnable_confidence=True
-        )
+        reasoner = PolicyKGReasoner(policy, tnorm="product", learnable_confidence=True)
         mu0 = torch.tensor([[0.6, 0.7, 0.8]])
         out = reasoner(mu0)
         out.verdicts["v"].sum().backward()

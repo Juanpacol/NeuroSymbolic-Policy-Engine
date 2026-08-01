@@ -71,6 +71,7 @@ def run_eval(
     batch_size: int = 32,
     clip_model: str = "ViT-L-14",
     clip_pretrained: str = "openai",
+    hidden_dim: int = 256,
 ) -> dict[str, Any]:
     """Runs the reasoner and baseline over one split and computes H1/H3.
 
@@ -85,6 +86,8 @@ def run_eval(
             trained with. Must match, or ``load_state_dict`` will fail
             on the head shapes.
         clip_pretrained: ``open_clip`` pretrained tag, likewise.
+        hidden_dim: shared trunk width the checkpoints were trained
+            with. Must match, likewise.
 
     Returns:
         A dict with ``dataset``, ``h1_consistency``, and
@@ -95,7 +98,13 @@ def run_eval(
 
     policy = load_policy(policy_path)
     extractor = NeuroSymbolicLayer.from_policy(
-        policy, model_name=clip_model, pretrained=clip_pretrained
+        policy,
+        model_name=clip_model,
+        pretrained=clip_pretrained,
+        hidden_dim=hidden_dim,
+        # The checkpoint carries the trained zero-shot buffer; re-encoding
+        # descriptions here would just be overwritten by load_state_dict.
+        init_from_descriptions=False,
     )
     reasoner = PolicyKGReasoner(policy, store_trace=False)
     # The training CLI checkpoints the whole PolicyEngine, so the state
@@ -110,6 +119,8 @@ def run_eval(
     baseline = NeuralBaselineClassifier(
         model_name=clip_model,
         pretrained=clip_pretrained,
+        num_predicates=len(policy.predicate_names("base")),
+        hidden_dim=hidden_dim,
         calibrator=VerdictCalibrator(),
     ).to(device)
     baseline.load_state_dict(torch.load(baseline_checkpoint, weights_only=True))
@@ -193,6 +204,7 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--clip-model", default="ViT-L-14")
     parser.add_argument("--clip-pretrained", default="openai")
+    parser.add_argument("--hidden-dim", type=int, default=256)
     parser.add_argument("--out", type=str, default=None)
     args = parser.parse_args()
 
@@ -206,6 +218,7 @@ def main() -> None:
         args.batch_size,
         clip_model=args.clip_model,
         clip_pretrained=args.clip_pretrained,
+        hidden_dim=args.hidden_dim,
     )
     _print_markdown(eval_result)
 
