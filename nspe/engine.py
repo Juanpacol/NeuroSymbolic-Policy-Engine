@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from torch import Tensor, nn
 
+from nspe.calibration import VerdictCalibrator
 from nspe.extractor import NeuroSymbolicLayer
 from nspe.reasoner import PolicyKGReasoner, ReasonerOutput
 
@@ -20,14 +21,29 @@ class PolicyEngine(nn.Module):
         extractor: produces base predicate truth degrees from raw
             (image, text) pairs.
         reasoner: consumes those truth degrees and produces verdicts.
+        calibrator: optional monotone map applied to each verdict to
+            produce ``ReasonerOutput.calibrated``. The raw ``verdicts``
+            an audit chain explains are never overwritten -- calibration
+            only affects the quantity compared against a binary label.
     """
 
     def __init__(
-        self, extractor: NeuroSymbolicLayer, reasoner: PolicyKGReasoner
+        self,
+        extractor: NeuroSymbolicLayer,
+        reasoner: PolicyKGReasoner,
+        calibrator: VerdictCalibrator | None = None,
     ) -> None:
         super().__init__()
         self.extractor = extractor
         self.reasoner = reasoner
+        self.calibrator = calibrator
+
+    def _calibrate(self, out: ReasonerOutput) -> ReasonerOutput:
+        if self.calibrator is not None:
+            out.calibrated = {
+                name: self.calibrator(v) for name, v in out.verdicts.items()
+            }
+        return out
 
     def forward_embedded(self, fused: Tensor) -> ReasonerOutput:
         """Runs the pipeline from a precomputed fused embedding.
@@ -40,7 +56,7 @@ class PolicyEngine(nn.Module):
             The reasoner's :class:`~nspe.reasoner.ReasonerOutput`.
         """
         out: ReasonerOutput = self.reasoner(self.extractor.forward_embedded(fused))
-        return out
+        return self._calibrate(out)
 
     def forward(self, images: Tensor, texts: list[str]) -> ReasonerOutput:
         """Runs the full pipeline on one batch.
@@ -55,4 +71,4 @@ class PolicyEngine(nn.Module):
         """
         mu0 = self.extractor(images, texts)
         out: ReasonerOutput = self.reasoner(mu0)
-        return out
+        return self._calibrate(out)

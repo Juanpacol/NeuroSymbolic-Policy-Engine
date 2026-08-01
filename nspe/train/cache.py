@@ -8,9 +8,11 @@ into a pure head/reasoner pass over cached features -- the difference
 between an hour per epoch and seconds, which is what makes full-dataset
 runs feasible on a free GPU session.
 
-The cache is keyed by nothing: it is the caller's job to keep a separate
-file per (split, CLIP architecture) pair, since embeddings from two
-different backbones are not interchangeable.
+Cache files record which backbone produced them and
+:class:`EmbeddingDataset` refuses a mismatch, since embeddings from two
+different backbones are not interchangeable and the failure is otherwise
+silent -- a wrong-backbone cache trains happily and only shows up as
+inexplicably poor metrics.
 """
 
 from __future__ import annotations
@@ -24,6 +26,29 @@ from torch.utils.data import DataLoader, Dataset
 from nspe.train.dataset import collate_hateful_memes
 
 
+def cache_path(
+    cache_dir: str | Path, split: str, model_name: str, pretrained: str
+) -> Path:
+    """Builds the cache filename for one (split, backbone) pair.
+
+    Keyed on the backbone's name rather than its embedding width:
+    ``ViT-B-32`` and ``ViT-B-16`` both have ``output_dim == 512``, so a
+    width-keyed name silently serves one backbone's embeddings to
+    another.
+
+    Args:
+        cache_dir: directory holding cache files.
+        split: dataset split name.
+        model_name: an ``open_clip`` model architecture name.
+        pretrained: an ``open_clip`` pretrained tag.
+
+    Returns:
+        The path this (split, backbone) pair should be cached at.
+    """
+    slug = f"{model_name}_{pretrained}".replace("/", "-")
+    return Path(cache_dir) / f"hateful_memes_{split}_{slug}.pt"
+
+
 def precompute_embeddings(
     encoder: nn.Module,
     dataset: Dataset[dict[str, object]],
@@ -31,6 +56,8 @@ def precompute_embeddings(
     batch_size: int = 32,
     device: str = "cpu",
     num_workers: int = 4,
+    model_name: str = "",
+    pretrained: str = "",
 ) -> dict[str, Tensor]:
     """Encodes a whole dataset once and writes the result to disk.
 
@@ -48,10 +75,13 @@ def precompute_embeddings(
         num_workers: dataloader workers. Image decoding and the mirror's
             lazy per-file download dominate the first pass, so more
             workers help well past the point where the GPU saturates.
+        model_name: ``open_clip`` architecture that produced these
+            embeddings, recorded so readers can reject a mismatch.
+        pretrained: ``open_clip`` pretrained tag, recorded likewise.
 
     Returns:
-        A dict with ``embeddings`` of shape ``(n, 2 * embed_dim)`` and
-        ``labels`` of shape ``(n,)``.
+        A dict with ``embeddings`` of shape ``(n, 2 * embed_dim)``,
+        ``labels`` of shape ``(n,)``, and the recorded backbone tags.
     """
     encoder = encoder.to(device)
     encoder.eval()
@@ -74,6 +104,8 @@ def precompute_embeddings(
     cache = {
         "embeddings": torch.cat(chunks),
         "labels": torch.cat(label_chunks),
+        "model_name": model_name,
+        "pretrained": pretrained,
     }
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -88,10 +120,30 @@ class EmbeddingDataset(Dataset[tuple[Tensor, Tensor]]):
         path: a cache file previously written by
             :func:`precompute_embeddings`.
         limit: if given, use only the first ``limit`` examples.
+        expect_model: if given, raise unless the cache was written by
+            this ``open_clip`` architecture.
+        expect_pretrained: if given, raise unless the cache was written
+            with this pretrained tag.
     """
 
-    def __init__(self, path: str | Path, limit: int | None = None) -> None:
+    def __init__(
+        self,
+        path: str | Path,
+        limit: int | None = None,
+        expect_model: str | None = None,
+        expect_pretrained: str | None = None,
+    ) -> None:
         cache = torch.load(path, weights_only=True)
+        for key, expected in (
+            ("model_name", expect_model),
+            ("pretrained", expect_pretrained),
+        ):
+            found = cache.get(key, "")
+            if expected is not None and found and found != expected:
+                raise ValueError(
+                    f"{path} was built with {key}={found!r}, expected "
+                    f"{expected!r}. Delete it or pass a matching backbone."
+                )
         self.embeddings: Tensor = cache["embeddings"]
         self.labels: Tensor = cache["labels"]
         if limit is not None:

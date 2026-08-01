@@ -27,6 +27,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from nspe.baselines.neural_classifier import NeuralBaselineClassifier
+from nspe.calibration import VerdictCalibrator
 from nspe.engine import PolicyEngine
 from nspe.eval.hateful_memes import compute_h1, compute_h3, sample_explanations
 from nspe.extractor import NeuroSymbolicLayer
@@ -68,6 +69,8 @@ def run_eval(
     split: str,
     device: str,
     batch_size: int = 32,
+    clip_model: str = "ViT-L-14",
+    clip_pretrained: str = "openai",
 ) -> dict[str, Any]:
     """Runs the reasoner and baseline over one split and computes H1/H3.
 
@@ -78,6 +81,10 @@ def run_eval(
         split: dataset split (``"validation"`` or ``"test"``).
         device: ``"cpu"``, ``"mps"``, or ``"cuda"``.
         batch_size: evaluation batch size.
+        clip_model: ``open_clip`` architecture the checkpoints were
+            trained with. Must match, or ``load_state_dict`` will fail
+            on the head shapes.
+        clip_pretrained: ``open_clip`` pretrained tag, likewise.
 
     Returns:
         A dict with ``dataset``, ``h1_consistency``, and
@@ -87,15 +94,24 @@ def run_eval(
     from nspe.data.hateful_memes import HatefulMemesDataset
 
     policy = load_policy(policy_path)
-    extractor = NeuroSymbolicLayer.from_policy(policy)
+    extractor = NeuroSymbolicLayer.from_policy(
+        policy, model_name=clip_model, pretrained=clip_pretrained
+    )
     reasoner = PolicyKGReasoner(policy, store_trace=False)
     # The training CLI checkpoints the whole PolicyEngine, so the state
-    # dict is keyed "extractor.*"/"reasoner.*"; load it as one.
-    engine = PolicyEngine(extractor, reasoner).to(device)
+    # dict is keyed "extractor.*"/"reasoner.*"/"calibrator.*"; load it
+    # as one. Both arms are built with a calibrator so the shapes match
+    # what training saved.
+    engine = PolicyEngine(extractor, reasoner, calibrator=VerdictCalibrator())
+    engine = engine.to(device)
     engine.load_state_dict(torch.load(reasoner_checkpoint, weights_only=True))
     engine.eval()
 
-    baseline = NeuralBaselineClassifier().to(device)
+    baseline = NeuralBaselineClassifier(
+        model_name=clip_model,
+        pretrained=clip_pretrained,
+        calibrator=VerdictCalibrator(),
+    ).to(device)
     baseline.load_state_dict(torch.load(baseline_checkpoint, weights_only=True))
     baseline.eval()
 
@@ -175,6 +191,8 @@ def main() -> None:
     parser.add_argument("--split", default="validation", choices=["validation", "test"])
     parser.add_argument("--device", default="cpu", choices=["cpu", "mps", "cuda"])
     parser.add_argument("--batch-size", type=int, default=32)
+    parser.add_argument("--clip-model", default="ViT-L-14")
+    parser.add_argument("--clip-pretrained", default="openai")
     parser.add_argument("--out", type=str, default=None)
     args = parser.parse_args()
 
@@ -186,6 +204,8 @@ def main() -> None:
         args.split,
         args.device,
         args.batch_size,
+        clip_model=args.clip_model,
+        clip_pretrained=args.clip_pretrained,
     )
     _print_markdown(eval_result)
 

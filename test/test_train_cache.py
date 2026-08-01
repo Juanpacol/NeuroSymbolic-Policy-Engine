@@ -15,6 +15,7 @@ from torch.utils.data import DataLoader, Dataset
 
 from nspe.train.cache import (
     EmbeddingDataset,
+    cache_path,
     collate_embeddings,
     precompute_embeddings,
 )
@@ -90,6 +91,38 @@ class TestPrecomputeEmbeddings(TestCase):
             self.assertEqual(inputs.shape, (2, _EMBED_DIM))
             self.assertIsNone(aux)
             self.assertEqual(labels.shape, (2,))
+
+
+class TestCacheKey(TestCase):
+    def test_same_width_backbones_get_different_paths(self):
+        # ViT-B-32 and ViT-B-16 both have output_dim == 512, so a
+        # width-keyed name would silently serve one backbone's
+        # embeddings to the other.
+        b32 = cache_path("/cache", "train", "ViT-B-32", "openai")
+        b16 = cache_path("/cache", "train", "ViT-B-16", "openai")
+        self.assertNotEqual(b32, b16)
+
+    def test_pretrained_tag_is_part_of_the_key(self):
+        self.assertNotEqual(
+            cache_path("/cache", "train", "ViT-B-32", "openai"),
+            cache_path("/cache", "train", "ViT-B-32", "laion2b_s34b_b79k"),
+        )
+
+    def test_reader_rejects_a_mismatched_backbone(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "cache.pt"
+            precompute_embeddings(
+                _StubEncoder(),
+                _StubDataset(4),
+                path,
+                batch_size=4,
+                num_workers=0,
+                model_name="ViT-B-32",
+                pretrained="openai",
+            )
+            EmbeddingDataset(path, expect_model="ViT-B-32")
+            with self.assertRaises(ValueError):
+                EmbeddingDataset(path, expect_model="ViT-L-14")
 
 
 if __name__ == "__main__":

@@ -14,6 +14,7 @@ from __future__ import annotations
 import torch
 from torch import Tensor, nn
 
+from nspe.calibration import VerdictCalibrator
 from nspe.extractor import _clip_fused_embedding
 
 
@@ -23,12 +24,15 @@ class NeuralBaselineClassifier(nn.Module):
     Args:
         model_name: an ``open_clip`` model architecture name.
         pretrained: an ``open_clip`` pretrained tag for ``model_name``.
+        calibrator: optional monotone map applied to the verdict, so
+            both arms of the comparison receive identical treatment.
     """
 
     def __init__(
         self,
         model_name: str = "ViT-B-32-quickgelu",
         pretrained: str = "openai",
+        calibrator: VerdictCalibrator | None = None,
     ) -> None:
         super().__init__()
         import open_clip  # type: ignore[import-untyped]
@@ -48,6 +52,7 @@ class NeuralBaselineClassifier(nn.Module):
 
         embed_dim = self.clip.visual.output_dim
         self.head = nn.Linear(embed_dim * 2, 1)
+        self.calibrator = calibrator
 
     def encode(self, images: Tensor, texts: list[str]) -> Tensor:
         """Encodes preprocessed images and raw text into a fused embedding.
@@ -74,7 +79,8 @@ class NeuralBaselineClassifier(nn.Module):
         Returns:
             Tensor of shape ``(batch,)``, values in ``(0, 1)``.
         """
-        return torch.sigmoid(self.head(fused)).squeeze(-1)
+        verdict = torch.sigmoid(self.head(fused)).squeeze(-1)
+        return verdict if self.calibrator is None else self.calibrator(verdict)
 
     def forward(self, images: Tensor, texts: list[str]) -> Tensor:
         """Produces a single verdict truth degree per case.

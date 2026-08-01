@@ -35,6 +35,13 @@ class ReasonerOutput:
             ``None`` if ``store_trace=False``.
         rule_tensor: the compiled policy this output was produced from,
             kept for :meth:`PolicyKGReasoner.explain`.
+        calibrated: verdicts mapped through a
+            :class:`~nspe.calibration.VerdictCalibrator`, or ``None`` if
+            the engine has no calibrator. Set by
+            :class:`~nspe.engine.PolicyEngine`, not by the reasoner:
+            calibration is about comparing against a binary label, while
+            ``verdicts`` remains the truth degree an audit chain
+            explains.
     """
 
     mu: Tensor
@@ -43,6 +50,7 @@ class ReasonerOutput:
     fire_trace: Tensor | None
     mu_trace: Tensor | None
     rule_tensor: RuleTensor
+    calibrated: dict[str, Tensor] | None = None
 
 
 class PolicyKGReasoner(nn.Module):
@@ -144,8 +152,7 @@ class PolicyKGReasoner(nn.Module):
         rt = self.rule_tensor
         if mu0.shape[-1] != rt.num_base:
             raise ValueError(
-                f"Expected mu0 with {rt.num_base} base predicates, "
-                f"got {mu0.shape[-1]}"
+                f"Expected mu0 with {rt.num_base} base predicates, got {mu0.shape[-1]}"
             )
         batch = mu0.shape[0]
         device, dtype = mu0.device, mu0.dtype
@@ -162,9 +169,7 @@ class PolicyKGReasoner(nn.Module):
 
         for t in range(self.num_iterations):
             if rt.num_rules > 0:
-                literal_log = gather_literal_log(
-                    log_mu, self.fire_idx, self.fire_sign
-                )
+                literal_log = gather_literal_log(log_mu, self.fire_idx, self.fire_sign)
                 log_body = self.tnorm.conj_segment(
                     literal_log, self.fire_rule, rt.num_rules
                 )
@@ -176,9 +181,7 @@ class PolicyKGReasoner(nn.Module):
                 # already-stabilized value, never a same-sweep partial
                 # one (which the monotone update below could never undo).
                 in_stratum = self.rule_stratum == t
-                log_fire = torch.where(
-                    in_stratum.unsqueeze(0), log_fire_all, floor
-                )
+                log_fire = torch.where(in_stratum.unsqueeze(0), log_fire_all, floor)
                 log_derived = self.tnorm.disj_segment(
                     log_fire, self.head_idx, rt.num_predicates
                 )
@@ -193,9 +196,7 @@ class PolicyKGReasoner(nn.Module):
                 fire_trace.append(log_fire)
 
         mu = torch.exp(log_mu)
-        verdicts = {
-            name: mu[:, rt.name_to_index[name]] for name in rt.verdict_names
-        }
+        verdicts = {name: mu[:, rt.name_to_index[name]] for name in rt.verdict_names}
         return ReasonerOutput(
             mu=mu,
             log_mu=log_mu,
