@@ -42,9 +42,7 @@ class TestComputeH1(TestCase):
 
         result = compute_h1(mu0, reasoner_verdict, baseline_verdict)
 
-        self.assertGreater(
-            result["reasoner"]["purity"], result["baseline"]["purity"]
-        )
+        self.assertGreater(result["reasoner"]["purity"], result["baseline"]["purity"])
 
 
 class TestComputeH3(TestCase):
@@ -65,6 +63,68 @@ class TestComputeH3(TestCase):
         result = compute_h3(verdict, verdict, labels)
         self.assertNotIn("significant", result)
         self.assertAlmostEqual(result["accuracy_gap"], 0.0)
+
+    def test_reports_auroc_and_majority_class_reference(self):
+        labels = torch.tensor([1.0] * 3 + [0.0] * 7)
+        result = compute_h3(torch.rand(10), torch.rand(10), labels)
+
+        self.assertIn("auroc", result["reasoner"])
+        self.assertIn("auroc_gap", result)
+        self.assertAlmostEqual(result["majority_class_accuracy"], 0.7)
+
+    def test_fitted_threshold_recovers_a_shifted_operating_point(self):
+        """Why the threshold is no longer hardcoded to 0.5.
+
+        The calibrator can relocate a model's operating point without
+        changing its ranking, so a fixed 0.5 measures calibration rather
+        than discrimination.
+        """
+        labels = torch.tensor([1.0, 1.0, 0.0, 0.0])
+        # Ranks perfectly, but every score sits below 0.5.
+        compressed = torch.tensor([0.20, 0.19, 0.10, 0.09])
+
+        at_half = compute_h3(compressed, compressed, labels, threshold=0.5)
+        fitted = compute_h3(compressed, compressed, labels, threshold=None)
+
+        self.assertEqual(at_half["reasoner"]["accuracy"], 0.5)
+        self.assertEqual(at_half["threshold_source"], "provided")
+        self.assertEqual(fitted["reasoner"]["accuracy"], 1.0)
+        self.assertEqual(fitted["threshold_source"], "fitted")
+        # AUROC saw through the operating point either way.
+        self.assertEqual(at_half["reasoner"]["auroc"], 1.0)
+
+    def test_each_model_gets_its_own_fitted_threshold(self):
+        labels = torch.tensor([1.0, 1.0, 0.0, 0.0])
+        result = compute_h3(
+            torch.tensor([0.9, 0.8, 0.2, 0.1]),
+            torch.tensor([0.09, 0.08, 0.02, 0.01]),
+            labels,
+        )
+
+        self.assertNotEqual(
+            result["reasoner"]["threshold"], result["baseline"]["threshold"]
+        )
+        self.assertEqual(result["reasoner"]["accuracy"], 1.0)
+        self.assertEqual(result["baseline"]["accuracy"], 1.0)
+
+
+class TestDegenerateModelsAreNotRewarded(TestCase):
+    def test_constant_reasoner_is_flagged_rather_than_winning_h1(self):
+        torch.manual_seed(0)
+        mu0 = (torch.rand(200, 3) > 0.5).float()
+        constant = torch.full((200,), 0.1)
+        discriminating = torch.rand(200)
+
+        h1 = compute_h1(mu0, constant, discriminating)
+
+        # The constant model still wins the raw rate...
+        self.assertLess(
+            h1["reasoner"]["inconsistency_rate"],
+            h1["baseline"]["inconsistency_rate"],
+        )
+        # ...but is disqualified rather than credited for it.
+        self.assertTrue(h1["reasoner"]["degenerate"])
+        self.assertFalse(h1["baseline"]["degenerate"])
 
 
 if __name__ == "__main__":

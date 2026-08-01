@@ -12,16 +12,13 @@ from typing import Any
 from torch import Tensor
 
 from nspe.consistency import ConsistencyChecker
+from nspe.eval.metrics import best_threshold, binary_metrics
 from nspe.explain import Explanation
 from nspe.reasoner import PolicyKGReasoner, ReasonerOutput
 
 
 def _report_to_dict(report: Any) -> dict[str, Any]:
-    return {
-        "inconsistency_rate": report.inconsistency_rate,
-        "purity": report.purity,
-        "num_classes": report.num_classes,
-    }
+    return report.as_dict()
 
 
 def compute_h1(
@@ -68,34 +65,20 @@ def compute_h1(
     }
 
 
-def _binary_metrics(
-    verdict: Tensor, labels: Tensor, threshold: float = 0.5
-) -> dict[str, float]:
-    pred = (verdict >= threshold).to(labels.dtype)
-    correct = (pred == labels).float().mean().item()
-
-    tp = ((pred == 1) & (labels == 1)).sum().item()
-    fp = ((pred == 1) & (labels == 0)).sum().item()
-    fn = ((pred == 0) & (labels == 1)).sum().item()
-    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-    f1 = (
-        2 * precision * recall / (precision + recall)
-        if (precision + recall) > 0
-        else 0.0
-    )
-    return {"accuracy": correct, "f1": f1}
-
-
 def compute_h3(
     reasoner_verdict: Tensor,
     baseline_verdict: Tensor,
     labels: Tensor,
-    threshold: float = 0.5,
+    threshold: float | None = None,
 ) -> dict[str, Any]:
-    """Computes H3 accuracy/F1 for the reasoner and baseline.
+    """Computes H3 accuracy/F1/AUROC for the reasoner and baseline.
 
-    The "not significant accuracy loss" threshold is intentionally left
+    AUROC is the headline number. It is threshold-free, so it does not
+    depend on an operating point that the verdict calibrator can move,
+    and it cannot be won by a model that collapses to the base rate.
+    Accuracy and F1 are reported alongside at a stated threshold.
+
+    The "not significant accuracy loss" bar is intentionally left
     undecided here -- this reports the raw reasoner-minus-baseline gap
     for the paper's methods section to interpret, rather than inventing
     a significance test that was never agreed on.
@@ -106,19 +89,42 @@ def compute_h3(
         baseline_verdict: baseline verdict truth degrees, shape
             ``(batch,)``.
         labels: ground-truth binary labels, shape ``(batch,)``.
-        threshold: threshold used to binarize each verdict.
+        threshold: threshold used to binarize each verdict. ``None``
+            fits one per model by maximizing F1 on *these* data, which
+            is only legitimate when they are the validation split --
+            fitting and reporting a threshold on the same split inflates
+            the result, so a reported test split must be passed a
+            threshold fitted on validation.
 
     Returns:
-        A dict with ``reasoner``/``baseline`` accuracy+F1 dicts and an
-        ``accuracy_gap`` / ``f1_gap`` (reasoner minus baseline).
+        A dict with ``reasoner``/``baseline`` metric dicts, the
+        ``threshold`` each used, a ``threshold_source`` of ``"fitted"``
+        or ``"provided"``, and ``accuracy_gap``/``f1_gap``/``auroc_gap``
+        (reasoner minus baseline).
     """
-    reasoner_metrics = _binary_metrics(reasoner_verdict, labels, threshold)
-    baseline_metrics = _binary_metrics(baseline_verdict, labels, threshold)
+    if threshold is None:
+        source = "fitted"
+        reasoner_threshold, _ = best_threshold(reasoner_verdict, labels)
+        baseline_threshold, _ = best_threshold(baseline_verdict, labels)
+    else:
+        source = "provided"
+        reasoner_threshold = baseline_threshold = threshold
+
+    reasoner_metrics = binary_metrics(reasoner_verdict, labels, reasoner_threshold)
+    baseline_metrics = binary_metrics(baseline_verdict, labels, baseline_threshold)
+    reasoner_metrics["threshold"] = reasoner_threshold
+    baseline_metrics["threshold"] = baseline_threshold
+
     return {
         "reasoner": reasoner_metrics,
         "baseline": baseline_metrics,
+        "threshold_source": source,
+        "majority_class_accuracy": max(
+            labels.float().mean().item(), 1.0 - labels.float().mean().item()
+        ),
         "accuracy_gap": reasoner_metrics["accuracy"] - baseline_metrics["accuracy"],
         "f1_gap": reasoner_metrics["f1"] - baseline_metrics["f1"],
+        "auroc_gap": reasoner_metrics["auroc"] - baseline_metrics["auroc"],
     }
 
 

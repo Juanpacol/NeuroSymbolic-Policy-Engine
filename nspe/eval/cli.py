@@ -29,10 +29,17 @@ from torch.utils.data import DataLoader
 from nspe.baselines.neural_classifier import NeuralBaselineClassifier
 from nspe.calibration import VerdictCalibrator
 from nspe.engine import PolicyEngine
+from nspe.eval.diagnostics import predicate_stats, signature_distribution
 from nspe.eval.hateful_memes import compute_h1, compute_h3, sample_explanations
 from nspe.extractor import NeuroSymbolicLayer
 from nspe.policy.loader import load_policy
 from nspe.reasoner import PolicyKGReasoner
+from nspe.train.cache import (
+    EmbeddingDataset,
+    cache_path,
+    collate_embeddings,
+    precompute_embeddings,
+)
 from nspe.train.dataset import collate_hateful_memes
 
 _VERDICT_NAME = "hateful"
@@ -72,6 +79,8 @@ def run_eval(
     clip_model: str = "ViT-L-14",
     clip_pretrained: str = "openai",
     hidden_dim: int = 256,
+    cache_dir: str | None = None,
+    threshold: float | None = None,
 ) -> dict[str, Any]:
     """Runs the reasoner and baseline over one split and computes H1/H3.
 
@@ -88,6 +97,11 @@ def run_eval(
         clip_pretrained: ``open_clip`` pretrained tag, likewise.
         hidden_dim: shared trunk width the checkpoints were trained
             with. Must match, likewise.
+        cache_dir: directory of precomputed CLIP embeddings, reusing the
+            training cache so evaluation does not re-encode the split.
+        threshold: verdict threshold. ``None`` fits one per model on
+            this split, which is only legitimate for validation -- pass
+            the validation-fitted value when reporting test.
 
     Returns:
         A dict with ``dataset``, ``h1_consistency``, and
@@ -126,21 +140,51 @@ def run_eval(
     baseline.load_state_dict(torch.load(baseline_checkpoint, weights_only=True))
     baseline.eval()
 
-    dataset = HatefulMemesDataset(split=split, transform=extractor.preprocess)
-    loader = DataLoader(
-        dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_hateful_memes
-    )
+    if cache_dir is not None:
+        path = cache_path(cache_dir, split, clip_model, clip_pretrained)
+        if not path.exists():
+            print(f"Encoding {split} split -> {path} (one-time)")
+            precompute_embeddings(
+                extractor,
+                HatefulMemesDataset(split=split, transform=extractor.preprocess),
+                path,
+                batch_size=batch_size,
+                device=device,
+                model_name=clip_model,
+                pretrained=clip_pretrained,
+            )
+        loader = DataLoader(
+            EmbeddingDataset(
+                path, expect_model=clip_model, expect_pretrained=clip_pretrained
+            ),
+            batch_size=batch_size,
+            shuffle=False,
+            collate_fn=collate_embeddings,
+        )
+        num_examples = len(loader.dataset)  # type: ignore[arg-type]
+    else:
+        dataset = HatefulMemesDataset(split=split, transform=extractor.preprocess)
+        loader = DataLoader(
+            dataset,
+            batch_size=batch_size,
+            shuffle=False,
+            collate_fn=collate_hateful_memes,
+        )
+        num_examples = len(dataset)
 
     all_mu0, all_reasoner_verdict, all_baseline_verdict, all_labels = [], [], [], []
-    for images, texts, labels in loader:
-        images = images.to(device)
-        mu0 = extractor(images, texts)
-        reasoner_out = reasoner(mu0)
-        baseline_verdict = baseline(images, texts)
+    for inputs, texts, labels in loader:
+        inputs = inputs.to(device)
+        fused = inputs if cache_dir is not None else extractor.encode(inputs, texts)
+        mu0 = extractor.forward_embedded(fused)
+        reasoner_out = engine.reasoner(mu0)
+        verdict = reasoner_out.verdicts[_VERDICT_NAME]
+        if engine.calibrator is not None:
+            verdict = engine.calibrator(verdict)
 
         all_mu0.append(mu0.cpu())
-        all_reasoner_verdict.append(reasoner_out.verdicts[_VERDICT_NAME].cpu())
-        all_baseline_verdict.append(baseline_verdict.cpu())
+        all_reasoner_verdict.append(verdict.cpu())
+        all_baseline_verdict.append(baseline.forward_embedded(fused).cpu())
         all_labels.append(labels)
 
     mu0 = torch.cat(all_mu0)
@@ -149,10 +193,16 @@ def run_eval(
     labels = torch.cat(all_labels)
 
     h1 = compute_h1(mu0, reasoner_verdict, baseline_verdict)
-    h3 = compute_h3(reasoner_verdict, baseline_verdict, labels)
+    h3 = compute_h3(reasoner_verdict, baseline_verdict, labels, threshold=threshold)
 
-    reasoner_pred = reasoner_verdict >= 0.5
-    baseline_pred = baseline_verdict >= 0.5
+    predicate_names = policy.predicate_names("base")
+    h1["predicate_stats"] = predicate_stats(mu0, predicate_names)
+    h1["signature_distribution"] = signature_distribution(
+        mu0, predicate_names, top_k=10
+    )
+
+    reasoner_pred = reasoner_verdict >= h3["reasoner"]["threshold"]
+    baseline_pred = baseline_verdict >= h3["baseline"]["threshold"]
     disagreements = (reasoner_pred != baseline_pred).nonzero(as_tuple=True)[0]
     sample_indices = disagreements[:5].tolist()
     h3["sample_explanations"] = sample_explanations(
@@ -163,7 +213,7 @@ def run_eval(
         "dataset": {
             "name": "neuralcatcher/hateful_memes",
             "split": split,
-            "num_examples": len(dataset),
+            "num_examples": num_examples,
         },
         "h1_consistency": h1,
         "h3_explainability": h3,
@@ -172,24 +222,58 @@ def run_eval(
 
 def _print_markdown(result: dict[str, Any]) -> None:
     h1 = result["h1_consistency"]
-    print("| model | inconsistency_rate | purity | num_classes |")
-    print("|---|---|---|---|")
+    print("### H1 consistency")
+    print("| model | inconsistency | null | adjusted | positive_rate | classes |")
+    print("|---|---|---|---|---|---|")
     for name in ("reasoner", "baseline"):
         r = h1[name]
-        print(
-            f"| {name} | {r['inconsistency_rate']:.4f} | {r['purity']:.4f} "
-            f"| {r['num_classes']} |"
+        adjusted = (
+            "n/a (degenerate)"
+            if r["degenerate"]
+            else f"{r['adjusted_consistency']:.4f}"
         )
+        print(
+            f"| {name} | {r['inconsistency_rate']:.4f} "
+            f"| {r['null_inconsistency']:.4f} | {adjusted} "
+            f"| {r['positive_rate']:.4f} | {r['num_classes']} |"
+        )
+    print(
+        "\nRaw inconsistency is not comparable across models on its own: a "
+        "model predicting one class scores a perfect 0. Read "
+        "`adjusted` (1 = perfect given the marginal, 0 = chance) "
+        "alongside `positive_rate`."
+    )
+
+    print("\n### Predicate activation")
+    print("| predicate | activation_rate | std | max_abs_corr |")
+    print("|---|---|---|---|")
+    for name, stats in h1["predicate_stats"].items():
+        print(
+            f"| {name} | {stats['activation_rate']:.4f} | {stats['std']:.4f} "
+            f"| {stats['max_abs_correlation']:.4f} |"
+        )
+    print(
+        f"\nsignature_entropy = {h1['reasoner']['signature_entropy']:.3f} bits "
+        f"over {h1['reasoner']['num_classes']} classes"
+    )
 
     h3 = result["h3_explainability"]
-    print("\n| model | accuracy | f1 |")
-    print("|---|---|---|")
+    print(f"\n### H3 accuracy (threshold {h3['threshold_source']})")
+    print("| model | auroc | accuracy | f1 | precision | recall | threshold |")
+    print("|---|---|---|---|---|---|---|")
     for name in ("reasoner", "baseline"):
         m = h3[name]
-        print(f"| {name} | {m['accuracy']:.4f} | {m['f1']:.4f} |")
+        print(
+            f"| {name} | {m['auroc']:.4f} | {m['accuracy']:.4f} | {m['f1']:.4f} "
+            f"| {m['precision']:.4f} | {m['recall']:.4f} | {m['threshold']:.4f} |"
+        )
     print(
-        f"\naccuracy_gap (reasoner - baseline) = {h3['accuracy_gap']:.4f}, "
-        f"f1_gap = {h3['f1_gap']:.4f}"
+        f"\nmajority-class accuracy = {h3['majority_class_accuracy']:.4f} "
+        "(any model below this has learned nothing usable)"
+    )
+    print(
+        f"\nauroc_gap (reasoner - baseline) = {h3['auroc_gap']:.4f}, "
+        f"accuracy_gap = {h3['accuracy_gap']:.4f}, f1_gap = {h3['f1_gap']:.4f}"
     )
 
 
@@ -205,6 +289,20 @@ def main() -> None:
     parser.add_argument("--clip-model", default="ViT-L-14")
     parser.add_argument("--clip-pretrained", default="openai")
     parser.add_argument("--hidden-dim", type=int, default=256)
+    parser.add_argument(
+        "--cache-dir",
+        type=str,
+        default=None,
+        help="Reuse the training embedding cache instead of re-encoding.",
+    )
+    parser.add_argument(
+        "--threshold",
+        type=float,
+        default=None,
+        help="Verdict threshold. Omit to fit one per model on this "
+        "split -- legitimate for validation only. When reporting test, "
+        "pass the value fitted on validation.",
+    )
     parser.add_argument("--out", type=str, default=None)
     args = parser.parse_args()
 
@@ -219,6 +317,8 @@ def main() -> None:
         clip_model=args.clip_model,
         clip_pretrained=args.clip_pretrained,
         hidden_dim=args.hidden_dim,
+        cache_dir=args.cache_dir,
+        threshold=args.threshold,
     )
     _print_markdown(eval_result)
 
