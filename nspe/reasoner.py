@@ -11,6 +11,7 @@ from torch import Tensor, nn
 
 from nspe.explain import Explanation
 from nspe.explain import explain as _explain
+from nspe.logic.aggregate import p_mean_segment
 from nspe.logic.ops import gather_literal_log
 from nspe.logic.tnorm import TNorm, get_tnorm
 from nspe.policy.compiler import compile_policy
@@ -72,6 +73,14 @@ class PolicyKGReasoner(nn.Module):
         store_trace: if ``True`` (default), retain per-iteration traces
             needed by :meth:`explain`. Set to ``False`` in production
             inference paths that do not need explanations.
+        aggregate: how rules sharing a head combine. ``"tconorm"``
+            (default) is the t-norm family's own disjunction;
+            ``"pmean"`` uses :func:`~nspe.logic.aggregate.p_mean_segment`,
+            which does not saturate toward 1 as the number of rules per
+            head grows. Ablation only -- a t-conorm is what makes the
+            result a fuzzy-logic verdict rather than an average.
+        pmean_p: power for ``aggregate="pmean"``. ``1`` is the
+            arithmetic mean, larger approaches ``max``.
     """
 
     body_idx: Tensor
@@ -92,13 +101,19 @@ class PolicyKGReasoner(nn.Module):
         eps: float = 1e-7,
         learnable_confidence: bool = False,
         store_trace: bool = True,
+        aggregate: str = "tconorm",
+        pmean_p: float = 2.0,
     ) -> None:
         super().__init__()
+        if aggregate not in ("tconorm", "pmean"):
+            raise ValueError(f"unknown aggregate: {aggregate}")
         rt = compile_policy(policy)
         self.rule_tensor = rt
         self.tnorm: TNorm = get_tnorm(tnorm)
         self.eps = eps
         self.store_trace = store_trace
+        self.aggregate = aggregate
+        self.pmean_p = pmean_p
         self.num_iterations = rt.num_iterations
 
         self.register_buffer("body_idx", rt.body_idx)
@@ -123,6 +138,14 @@ class PolicyKGReasoner(nn.Module):
             self.log_rule_conf = nn.Parameter(rt.log_rule_conf.clone())
         else:
             self.register_buffer("log_rule_conf", rt.log_rule_conf)
+
+    def _aggregate(self, log_fire: Tensor, num_predicates: int) -> Tensor:
+        """Combines the rules concluding each head into one truth degree."""
+        if self.aggregate == "pmean":
+            return p_mean_segment(
+                log_fire, self.head_idx, num_predicates, p=self.pmean_p
+            )
+        return self.tnorm.disj_segment(log_fire, self.head_idx, num_predicates)
 
     @property
     def num_predicates(self) -> int:
@@ -182,9 +205,7 @@ class PolicyKGReasoner(nn.Module):
                 # one (which the monotone update below could never undo).
                 in_stratum = self.rule_stratum == t
                 log_fire = torch.where(in_stratum.unsqueeze(0), log_fire_all, floor)
-                log_derived = self.tnorm.disj_segment(
-                    log_fire, self.head_idx, rt.num_predicates
-                )
+                log_derived = self._aggregate(log_fire, rt.num_predicates)
             else:
                 log_fire = log_mu.new_zeros((batch, 0))
                 log_derived = torch.full_like(log_mu, floor)

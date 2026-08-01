@@ -112,6 +112,7 @@ def _build_model(args: argparse.Namespace) -> tuple[nn.Module, object]:
             policy,
             store_trace=False,
             learnable_confidence=args.learnable_confidence,
+            aggregate=args.aggregate,
         )
         engine = PolicyEngine(extractor, reasoner, calibrator=calibrator)
         return engine, extractor.preprocess
@@ -323,6 +324,13 @@ def main() -> None:
     )
     parser.add_argument("--lambda-decorr", type=float, default=0.05)
     parser.add_argument("--lambda-entropy", type=float, default=0.02)
+    parser.add_argument(
+        "--aggregate",
+        default="tconorm",
+        choices=["tconorm", "pmean"],
+        help="How rules sharing a head combine. Ablation only: a "
+        "t-conorm is what makes the output a fuzzy-logic verdict.",
+    )
     parser.add_argument(
         "--select-metric",
         default="auroc",

@@ -146,6 +146,49 @@ class TestReasonerFixpointProperties(TestCase):
         self.assertIsNotNone(mu0.grad)
         self.assertTrue((mu0.grad.abs() > 0).all())
 
+class TestAggregationMode(TestCase):
+    """The p-mean ablation: does rule aggregation have to be a t-conorm?"""
+
+    def _policy(self) -> Policy:
+        # Several rules concluding one head, which is where a t-conorm
+        # saturates toward 1 and a p-mean does not.
+        return Policy(
+            name="many_rules",
+            predicates=(
+                Predicate("a", "base"),
+                Predicate("b", "base"),
+                Predicate("c", "base"),
+                Predicate("v", "verdict"),
+            ),
+            rules=tuple(
+                Rule(id=f"R{i}", head="v", body=(Literal(name),))
+                for i, name in enumerate("abc")
+            ),
+        )
+
+    def test_pmean_does_not_saturate_where_tconorm_does(self):
+        mu0 = torch.full((1, 3), 0.6)
+        tconorm = PolicyKGReasoner(self._policy(), aggregate="tconorm")(mu0)
+        pmean = PolicyKGReasoner(self._policy(), aggregate="pmean")(mu0)
+
+        # Three independent 0.6 rules OR together to 1 - 0.4^3 = 0.936.
+        self.assertGreater(tconorm.verdicts["v"].item(), 0.9)
+        self.assertLess(pmean.verdicts["v"].item(), 0.7)
+
+    def test_pmean_stays_differentiable(self):
+        mu0 = torch.full((1, 3), 0.6, requires_grad=True)
+        reasoner = PolicyKGReasoner(self._policy(), aggregate="pmean")
+        reasoner(mu0).verdicts["v"].sum().backward()
+
+        self.assertTrue(torch.isfinite(mu0.grad).all())
+        self.assertTrue((mu0.grad.abs() > 0).any())
+
+    def test_tconorm_is_the_default(self):
+        self.assertEqual(PolicyKGReasoner(self._policy()).aggregate, "tconorm")
+
+    def test_rejects_unknown_aggregate(self):
+        with self.assertRaises(ValueError):
+            PolicyKGReasoner(self._policy(), aggregate="mean")
 
 if __name__ == "__main__":
     run_tests()
