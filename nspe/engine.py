@@ -29,6 +29,19 @@ class PolicyEngine(nn.Module):
         self.extractor = extractor
         self.reasoner = reasoner
 
+    def forward_embedded(self, fused: Tensor) -> ReasonerOutput:
+        """Runs the pipeline from a precomputed fused embedding.
+
+        Args:
+            fused: fused CLIP embeddings, shape
+                ``(batch, 2 * embed_dim)``.
+
+        Returns:
+            The reasoner's :class:`~nspe.reasoner.ReasonerOutput`.
+        """
+        out: ReasonerOutput = self.reasoner(self.extractor.forward_embedded(fused))
+        return out
+
     def forward(self, images: Tensor, texts: list[str]) -> ReasonerOutput:
         """Runs the full pipeline on one batch.
 

@@ -119,6 +119,25 @@ class NeuroSymbolicLayer(nn.Module):
         """
         return _clip_fused_embedding(self.clip, self.tokenizer, images, texts)
 
+    def forward_embedded(self, fused: Tensor) -> Tensor:
+        """Produces predicate truth degrees from a precomputed embedding.
+
+        Skips the frozen CLIP backbone entirely, so training can run off
+        embeddings cached once by
+        :func:`~nspe.train.cache.precompute_embeddings` instead of
+        re-encoding every image on every epoch.
+
+        Args:
+            fused: fused CLIP embeddings, shape
+                ``(batch, 2 * embed_dim)``, as returned by
+                :meth:`encode`.
+
+        Returns:
+            Tensor of shape ``(batch, len(predicate_names))``, values in
+            ``(0, 1)``.
+        """
+        return torch.sigmoid(self.heads(fused))
+
     def forward(self, images: Tensor, texts: list[str]) -> Tensor:
         """Produces base predicate truth degrees for a batch.
 
@@ -132,5 +151,4 @@ class NeuroSymbolicLayer(nn.Module):
             ``(0, 1)``, suitable as ``mu0`` for
             :class:`~nspe.reasoner.PolicyKGReasoner`.
         """
-        fused = self.encode(images, texts)
-        return torch.sigmoid(self.heads(fused))
+        return self.forward_embedded(self.encode(images, texts))

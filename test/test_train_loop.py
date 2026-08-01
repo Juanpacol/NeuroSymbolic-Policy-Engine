@@ -67,6 +67,39 @@ class TestTrainModel(TestCase):
             state = torch.load(checkpoint_path, weights_only=True)
             self.assertIn("linear.weight", state)
 
+    def test_resume_restores_checkpointed_weights(self):
+        train_batches = list(_toy_batches(n_batches=8, batch_size=16, seed=0))
+        val_batches = list(_toy_batches(n_batches=2, batch_size=16, seed=1))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            checkpoint_path = Path(tmp) / "model.pt"
+            trained = _ToyModel()
+            train_model(
+                trained,
+                forward_fn=lambda m, images, texts: m(images, texts),
+                train_loader=train_batches,
+                val_loader=val_batches,
+                epochs=10,
+                lr=0.1,
+                device="cpu",
+                checkpoint_path=checkpoint_path,
+            )
+            saved = torch.load(checkpoint_path, weights_only=True)
+
+            resumed = _ToyModel()
+            result = train_model(
+                resumed,
+                forward_fn=lambda m, images, texts: m(images, texts),
+                train_loader=train_batches,
+                val_loader=val_batches,
+                epochs=0,
+                device="cpu",
+                resume_from=checkpoint_path,
+            )
+
+            self.assertEqual(result["train_losses"], [])
+            self.assertEqual(resumed.linear.weight, saved["linear.weight"])
+
 
 if __name__ == "__main__":
     run_tests()

@@ -27,6 +27,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from nspe.baselines.neural_classifier import NeuralBaselineClassifier
+from nspe.engine import PolicyEngine
 from nspe.eval.hateful_memes import compute_h1, compute_h3, sample_explanations
 from nspe.extractor import NeuroSymbolicLayer
 from nspe.policy.loader import load_policy
@@ -86,10 +87,13 @@ def run_eval(
     from nspe.data.hateful_memes import HatefulMemesDataset
 
     policy = load_policy(policy_path)
-    extractor = NeuroSymbolicLayer.from_policy(policy).to(device)
-    extractor.load_state_dict(torch.load(reasoner_checkpoint, weights_only=True))
-    extractor.eval()
-    reasoner = PolicyKGReasoner(policy, store_trace=False).to(device)
+    extractor = NeuroSymbolicLayer.from_policy(policy)
+    reasoner = PolicyKGReasoner(policy, store_trace=False)
+    # The training CLI checkpoints the whole PolicyEngine, so the state
+    # dict is keyed "extractor.*"/"reasoner.*"; load it as one.
+    engine = PolicyEngine(extractor, reasoner).to(device)
+    engine.load_state_dict(torch.load(reasoner_checkpoint, weights_only=True))
+    engine.eval()
 
     baseline = NeuralBaselineClassifier().to(device)
     baseline.load_state_dict(torch.load(baseline_checkpoint, weights_only=True))

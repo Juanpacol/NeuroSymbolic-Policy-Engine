@@ -20,13 +20,14 @@ from torch import Tensor, nn
 
 def train_model(
     model: nn.Module,
-    forward_fn: Callable[[nn.Module, Tensor, list[str]], Tensor],
-    train_loader: Iterable[tuple[Tensor, list[str], Tensor]],
-    val_loader: Iterable[tuple[Tensor, list[str], Tensor]],
+    forward_fn: Callable[[nn.Module, Tensor, Any], Tensor],
+    train_loader: Iterable[tuple[Tensor, Any, Tensor]],
+    val_loader: Iterable[tuple[Tensor, Any, Tensor]],
     epochs: int = 10,
     lr: float = 1e-3,
     device: str = "cpu",
     checkpoint_path: str | Path | None = None,
+    resume_from: str | Path | None = None,
 ) -> dict[str, Any]:
     """Trains ``model``'s trainable parameters against a binary label.
 
@@ -34,24 +35,35 @@ def train_model(
         model: the module to train. Only parameters with
             ``requires_grad=True`` are optimized (e.g. a frozen CLIP
             backbone is skipped automatically).
-        forward_fn: maps ``(model, images, texts)`` to a verdict tensor
+        forward_fn: maps ``(model, inputs, aux)`` to a verdict tensor
             of shape ``(batch,)`` in ``(0, 1)`` -- e.g.
             ``lambda m, i, t: m(i, t).verdicts["hateful"]`` for a
             ``PolicyEngine``, or ``lambda m, i, t: m(i, t)`` for
             ``NeuralBaselineClassifier``.
-        train_loader: yields ``(images, texts, labels)`` batches.
-        val_loader: yields ``(images, texts, labels)`` batches, used for
+        train_loader: yields ``(inputs, aux, labels)`` batches, where
+            ``inputs`` is whatever ``forward_fn`` consumes (preprocessed
+            images, or cached embeddings) and ``aux`` is the matching
+            per-batch side input (raw texts, or ``None`` when the
+            embedding already carries them).
+        val_loader: yields batches in the same shape, used for
             checkpoint selection only (no gradient updates).
         epochs: number of passes over ``train_loader``.
         lr: Adam learning rate.
         device: ``"cpu"``, ``"mps"``, or ``"cuda"``.
         checkpoint_path: if given, the best-val-loss ``model.state_dict()``
-            is saved here via ``torch.save``.
+            is written here after every epoch that improves on the
+            previous best, so an interrupted session keeps its progress.
+        resume_from: if given, a ``state_dict`` loaded into ``model``
+            before training starts. Optimizer state is not restored --
+            Adam re-warms in a few steps on heads this small.
 
     Returns:
         A dict with ``best_val_loss`` and per-epoch ``train_losses`` and
         ``val_losses`` lists.
     """
+    if resume_from is not None:
+        model.load_state_dict(torch.load(resume_from, weights_only=True))
+
     model = model.to(device)
     params = [p for p in model.parameters() if p.requires_grad]
     optimizer = torch.optim.Adam(params, lr=lr)
@@ -59,17 +71,16 @@ def train_model(
     train_losses: list[float] = []
     val_losses: list[float] = []
     best_val_loss = float("inf")
-    best_state: dict[str, Tensor] | None = None
 
     for _ in range(epochs):
         model.train()
         running_loss = 0.0
         num_batches = 0
-        for images, texts, labels in train_loader:
-            images = images.to(device)
+        for inputs, aux, labels in train_loader:
+            inputs = inputs.to(device)
             labels = labels.to(device)
             optimizer.zero_grad()
-            verdict = forward_fn(model, images, texts)
+            verdict = forward_fn(model, inputs, aux)
             loss = F.binary_cross_entropy(verdict, labels)
             loss.backward()
             optimizer.step()
@@ -81,10 +92,10 @@ def train_model(
         running_val_loss = 0.0
         num_val_batches = 0
         with torch.no_grad():
-            for images, texts, labels in val_loader:
-                images = images.to(device)
+            for inputs, aux, labels in val_loader:
+                inputs = inputs.to(device)
                 labels = labels.to(device)
-                verdict = forward_fn(model, images, texts)
+                verdict = forward_fn(model, inputs, aux)
                 loss = F.binary_cross_entropy(verdict, labels)
                 running_val_loss += loss.item()
                 num_val_batches += 1
@@ -93,12 +104,10 @@ def train_model(
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
-
-    if checkpoint_path is not None and best_state is not None:
-        checkpoint_path = Path(checkpoint_path)
-        checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
-        torch.save(best_state, checkpoint_path)
+            if checkpoint_path is not None:
+                path = Path(checkpoint_path)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                torch.save(model.state_dict(), path)
 
     return {
         "best_val_loss": best_val_loss,

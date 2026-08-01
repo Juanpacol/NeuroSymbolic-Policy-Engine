@@ -63,6 +63,19 @@ class NeuralBaselineClassifier(nn.Module):
         """
         return _clip_fused_embedding(self.clip, self.tokenizer, images, texts)
 
+    def forward_embedded(self, fused: Tensor) -> Tensor:
+        """Produces a verdict from a precomputed fused embedding.
+
+        Args:
+            fused: fused CLIP embeddings, shape
+                ``(batch, 2 * embed_dim)``, as returned by
+                :meth:`encode`.
+
+        Returns:
+            Tensor of shape ``(batch,)``, values in ``(0, 1)``.
+        """
+        return torch.sigmoid(self.head(fused)).squeeze(-1)
+
     def forward(self, images: Tensor, texts: list[str]) -> Tensor:
         """Produces a single verdict truth degree per case.
 
@@ -75,5 +88,4 @@ class NeuralBaselineClassifier(nn.Module):
             comparable to a :class:`~nspe.reasoner.PolicyKGReasoner`
             verdict.
         """
-        fused = self.encode(images, texts)
-        return torch.sigmoid(self.head(fused)).squeeze(-1)
+        return self.forward_embedded(self.encode(images, texts))
