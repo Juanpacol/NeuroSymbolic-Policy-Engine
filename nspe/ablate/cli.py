@@ -36,6 +36,7 @@ from typing import Any
 import torch
 
 from nspe.eval.cli import run_eval
+from nspe.eval.metrics import mean_std
 from nspe.policy.loader import load_policy
 from nspe.reasoner import PolicyKGReasoner
 from nspe.train.cli import build_parser, train_one
@@ -248,12 +249,6 @@ def run_ablations(
             yield _summarize(run_id, config, seed, trained, evaluated)
 
 
-def _mean_std(values: list[float]) -> tuple[float, float]:
-    mean = sum(values) / len(values)
-    variance = sum((v - mean) ** 2 for v in values) / len(values)
-    return mean, variance**0.5
-
-
 def _print_markdown(rows: list[dict[str, Any]]) -> None:
     print("\n| config | seed | reasoner auroc | gap | adj. consistency | classes |")
     print("|---|---|---|---|---|---|")
@@ -270,9 +265,9 @@ def _print_markdown(rows: list[dict[str, Any]]) -> None:
         group = [r for r in rows if r["config"]["name"] == name]
         if not group:
             continue
-        auroc = _mean_std([r["reasoner_auroc"] for r in group])
-        adjusted = _mean_std([r["adjusted_consistency"] for r in group])
-        classes = _mean_std([float(r["num_classes"]) for r in group])
+        auroc = mean_std([r["reasoner_auroc"] for r in group])
+        adjusted = mean_std([r["adjusted_consistency"] for r in group])
+        classes = mean_std([float(r["num_classes"]) for r in group])
         print(
             f"| {name} | {auroc[0]:.4f} ± {auroc[1]:.4f} "
             f"| {adjusted[0]:.4f} ± {adjusted[1]:.4f} "

@@ -16,6 +16,26 @@ from torch import Tensor
 from nspe.logic.ops import segment_sum
 
 
+def mean_std(values: list[float]) -> tuple[float, float]:
+    """Returns the mean and *population* standard deviation.
+
+    Population, not sample: the figures published in
+    ``docs/h1_h3_findings.md`` were computed this way, so anything
+    reproducing them must divide by ``n``. At the five seeds those
+    tables report, the sample deviation would be about 12% wider and
+    every error bar in the paper would silently shift.
+
+    Args:
+        values: the measurements to summarize; must be non-empty.
+
+    Returns:
+        A tuple ``(mean, population_std)``.
+    """
+    mean = sum(values) / len(values)
+    variance = sum((v - mean) ** 2 for v in values) / len(values)
+    return mean, variance**0.5
+
+
 def _average_ranks(x: Tensor) -> Tensor:
     """Returns 1-based ranks of ``x``, averaging over tied values.
 
