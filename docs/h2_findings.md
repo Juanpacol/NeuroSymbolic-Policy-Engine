@@ -1,6 +1,6 @@
 # H2: latency of the differentiable reasoner vs. an ASP solver
 
-Snapshot as of commit `009d91b`. Read this before quoting any speedup
+Snapshot as of commit `74b35dc`. Read this before quoting any speedup
 number, and before touching `nspe/bench/`.
 
 H2 is the project's core engineering claim: a GPU-native fuzzy logic
@@ -25,49 +25,87 @@ is harmless and deliberate: the reasoner is dense tensor arithmetic
 with no value-dependent branching, so its runtime follows tensor
 shapes, not values — and the shapes match the crisp arm exactly.
 
-## The result is a crossover, not a constant speedup
+## Headline result: GPU latency is nearly flat, CPU and Clingo are not
 
-Measured on an **Apple M5, CPU only** (torch 2.13.0, clingo 5.8.0,
-`meta_community_standards` policy, fingerprint `89eb27db373e6939`,
-`--reps 100 --clingo-budget-s 10`):
+Measured on a cloud T4 instance (`Linux-6.12.90+-x86_64`, torch
+2.10.0+cu128, clingo 5.8.0, `meta_community_standards` policy,
+fingerprint `89eb27db373e6939...`, `--reps 200 --clingo-budget-s 30`).
+CPU and CUDA sweeps ran on the **same machine**, so the comparison
+between them is apples-to-apples.
 
-| batch | crisp (ms) | clingo (ms) | speedup (crisp) | crisp per-item (ms) | clingo per-item (ms) |
-|---|---|---|---|---|---|
-| 1 | 0.102 | 0.016 | **0.15x** | 0.10179 | 0.01575 |
-| 8 | 0.108 | 0.125 | 1.16x | 0.01353 | 0.01567 |
-| 64 | 0.137 | 0.996 | 7.30x | 0.00213 | 0.01557 |
-| 256 | 0.612 | 3.950 | 6.45x | 0.00239 | 0.01543 |
+| batch | reasoner_crisp (ms) | clingo (ms) | speedup (crisp) | speedup (product) |
+|---|---|---|---|---|
+| 1 | 2.072 | 0.074 | **0.036x** | 0.024x |
+| 8 | 2.139 | 0.578 | 0.270x | 0.191x |
+| 64 | 2.142 | 4.667 | 2.18x | 1.52x |
+| 256 | 2.128 | 19.428 | 9.13x | 6.27x |
+| 1024 | 2.122 | 77.455 | 36.5x | 24.9x |
+| 8192 | 2.128 | 617.964 | **290.4x** | 198.1x |
 
-**At batch 1, Clingo is roughly 6x faster than the reasoner.** The
-crossover sits between batch 1 and batch 8. This is the honest shape of
-the result and it should be reported, not buried: on a single case,
-with hardware and batching held fixed, a mature stable-model solver
-beats PyTorch's per-op overhead on a policy this small.
+**The reasoner's GPU latency barely moves across four orders of
+magnitude of batch size** (2.07 -> 2.13 ms from batch 1 to 8192): at
+these sizes the actual tensor compute is negligible next to CUDA kernel
+launch/sync overhead, so growing the batch is close to free. Clingo has
+no such floor and scales linearly, because it solves one case at a
+time. The whole speedup curve is that gap widening.
 
-What the reasoner has is **amortization**. Its per-item cost falls 48x
-from batch 1 to batch 64 (0.10179 -> 0.00213 ms) and then flattens,
-while Clingo's is essentially constant across the whole sweep (0.01575
--> 0.01543 ms) because it solves sequentially, one case at a time.
+### The GPU only wins past a batch-size threshold, and CPU beats it below it
 
-That is the defensible form of the H2 claim, and it is a claim about
-the *formulation*, not about raw arithmetic being faster: expressing
-policy inference as batched differentiable tensor ops is what makes
-batching possible at all. An ASP solver has no batch dimension to
-exploit. The paper should say precisely that, rather than quoting
-"7.3x" without the batch axis.
+Same machine, same policy, CPU vs. CUDA:
 
-### CUDA and rule-base scaling — pending
+| batch | CPU speedup (crisp) | CUDA speedup (crisp) |
+|---|---|---|
+| 1 | 0.067x | 0.036x |
+| 8 | 0.470x | 0.270x |
+| 64 | 3.71x | 2.18x |
+| 1024 | 22.5x | 36.5x |
 
-Requires a T4 run (`docs/colab_benchmark.md`, Cells 4/4b/5). Two
-questions to answer there:
+**Below roughly batch 64, CPU is the faster reasoner arm, not GPU.**
+CUDA kernel launch overhead exceeds a CPU function call's overhead at
+small batch sizes; GPU only becomes the better choice once its
+near-flat latency starts to dominate a linearly-scaling alternative,
+which happens somewhere between batch 64 and 1024 on this hardware. A
+deployment doing single-case, low-latency inference should not assume
+GPU is faster by default — it depends on the batch size actually
+achievable in production.
 
-1. **Where does the crossover move on GPU?** Expect it to move right
-   (higher fixed launch overhead) and the plateau to go lower.
-2. **How does the advantage scale with the rule base?** A preliminary
-   CPU spot check on a synthetic 50-base/200-rule policy gave 4.75x at
-   batch 64 against the meta policy's 7.30x — i.e. the advantage
-   *narrowed* as the rule base grew. If that holds on GPU it is a
-   limitation worth stating plainly.
+### Synthetic b10_r20 (10 base predicates, 20 rules): consistent with the meta policy
+
+| batch | speedup (crisp) |
+|---|---|
+| 1 | 0.042x |
+| 64 | 2.67x |
+| 1024 | 42.7x |
+
+Same crossover shape as the meta policy. Whether the advantage grows or
+shrinks as the rule base scales further (`b50_r200`, `b100_r1000`) is
+**pending** — see Open questions below.
+
+## Why the crisp arm is the one to lead with
+
+The defensible form of the H2 claim is about the *formulation*, not
+about raw arithmetic being faster: expressing policy inference as
+batched differentiable tensor ops is what makes near-flat latency (and
+therefore batching) possible at all. An ASP solver has no batch
+dimension to exploit — each case is an independent search. The paper
+should say precisely that, anchored to the crisp-arm numbers (the
+certified-equivalent computation), rather than quoting the product
+arm's larger number without the batch axis attached.
+
+## Open questions (pending more T4 runs)
+
+1. **Does the advantage grow or shrink as the rule base scales?** Only
+   `b10_r20` is measured. `b50_r200` and `b100_r1000` are needed to see
+   whether Clingo's grounding/search cost grows faster or slower than
+   the reasoner's (near-constant, but with more predicates the compiled
+   rule tensor and hence the per-call GPU work does grow).
+2. **Exactly where does the CPU/GPU crossover sit?** Bracketed between
+   batch 64 and 1024 above; a finer sweep (`--batch-sizes 64 128 256
+   512`) would locate it precisely, which matters if a real deployment's
+   batch size falls in that range.
+3. **Does the crossover move with policy size?** If a larger rule base
+   increases the reasoner's per-call GPU cost, the CPU/GPU crossover
+   batch size would shift too.
 
 ## Threats to validity
 
@@ -76,10 +114,10 @@ Every one of these should survive into the paper's methods section.
 1. **The speedup conflates three advantages: vectorization, batching,
    and GPU hardware.** This is why the CPU sweep exists and is not
    optional. The CPU `batch=1` row isolates vectorization vs. search
-   with the other two held fixed — and on that row we lose. The CPU
-   large-batch rows add batching. The CUDA delta adds hardware.
-   Reporting only the CUDA large-batch number would be attributing all
-   three to the formulation.
+   with the other two held fixed — and on that row we lose, on both CPU
+   and GPU. The CPU large-batch rows add batching. The CUDA delta at
+   large batch adds hardware, but only once batch size clears the
+   GPU-launch-overhead threshold described above.
 2. **The reasoner's timed region excludes host-to-device transfer** of
    `mu0`, documented in `nspe/bench/cli.py`'s module docstring. Justified
    — production inference would not re-upload per case, and the neural
@@ -89,15 +127,17 @@ Every one of these should survive into the paper's methods section.
    per-case time on the bundled policies and 37.5% on a 200-rule
    synthetic one, growing with the rule base. The benchmark now calls
    `infer_verdicts()`, which runs the identical solve and reads only
-   verdict atoms. This *lowered* our reported speedup (8.85x -> 7.53x
-   at CPU batch 64) and any number predating that commit is inflated.
+   verdict atoms. This *lowered* our reported speedup and any number
+   predating that commit is inflated.
 4. **Clingo's `p95_ms`/`p99_ms` are not comparable to the reasoner's.**
    One Clingo rep is `batch_size` sequential solves, so its tails are
    per-batch aggregates, not per-case latencies. Compare
    `per_item_median_ms`. Rep counts are budgeted by wall clock
    (`--clingo-budget-s`) rather than a fixed integer, because a fixed
    count costs time linear in batch size; the earlier formula degraded
-   to 5 reps at batch 1024 against the reasoner's 200.
+   to 5 reps at batch 1024 against the reasoner's 200. (At batch 8192,
+   `clingo.reps` landed at 47 under a 30s budget — comfortably above the
+   floor of 5.)
 5. **Only the crisp arm is certified.** `test_clingo_agreement.py`
    proves reasoner-Clingo agreement at `tnorm="crisp"`, and
    `test_bench_cli.py::test_crisp_arm_agrees_with_clingo_batched` proves
@@ -109,9 +149,14 @@ Every one of these should survive into the paper's methods section.
 6. **Single-threaded Clingo.** Multi-shot single-solver is the standard
    deployment, so this is the right baseline, but it is worth stating
    that no attempt was made to parallelize it across cores.
-7. **Small policies.** `meta_community_standards` has few rules; the
-   synthetic sweep exists to show scaling. Conclusions about large rule
-   bases should come from the synthetic rows, not the bundled policy.
+7. **Small-to-medium policies, so far.** `meta_community_standards` and
+   `synthetic_b10_r20` are both small. Conclusions about large rule
+   bases await `b50_r200` and `b100_r1000`.
+8. **GPU launch overhead is instance-specific.** The ~2.1ms floor
+   reflects this T4 instance's kernel launch and synchronization cost;
+   a different GPU (or a warmer/cooler thermal/scheduling state on a
+   shared cloud instance) would shift the floor and hence the CPU/GPU
+   crossover point. Report the GPU model and note this in the paper.
 
 ## Reproducing
 

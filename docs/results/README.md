@@ -24,8 +24,11 @@ with), `reasoner_product` (the deployed configuration), and `clingo`.
 
 | file | command | machine |
 |---|---|---|
-| `h2_cpu_m5_meta.json` | `python -m nspe.bench.cli --device cpu --batch-sizes 1 8 64 256 --warmup 20 --reps 100 --clingo-budget-s 10` | Apple M5, macOS 26.4.1, torch 2.13.0, clingo 5.8.0 |
-| _CUDA sweeps pending_ | see `docs/colab_benchmark.md` Cells 4/4b/5 | T4 |
+| `h2_cpu_m5_meta.json` | `python -m nspe.bench.cli --device cpu --batch-sizes 1 8 64 256 --warmup 20 --reps 100 --clingo-budget-s 10` | Apple M5, macOS 26.4.1, torch 2.13.0, clingo 5.8.0 (preliminary local check) |
+| `h2_cuda_meta.json` | `python -m nspe.bench.cli --device cuda --batch-sizes 1 8 64 256 1024 8192 --warmup 20 --reps 200 --clingo-budget-s 30` | Cloud T4, Linux x86_64, torch 2.10.0+cu128, clingo 5.8.0 |
+| `h2_cpu_meta_cloud.json` | `python -m nspe.bench.cli --device cpu --batch-sizes 1 8 64 256 1024 --warmup 20 --reps 200 --clingo-budget-s 30` | Same cloud instance as above, CPU -- pairs with `h2_cuda_meta.json` for the CPU/GPU crossover comparison |
+| `h2_cuda_synthetic_b10_r20.json` | `python -m nspe.bench.cli --device cuda --synthetic 10 20 --batch-sizes 1 64 1024 --warmup 20 --reps 200 --clingo-budget-s 30` | Same cloud T4 |
+| _`b50_r200`, `b100_r1000` pending_ | see `docs/colab_benchmark.md` Cell 5 | T4 |
 
 ## H1/H3 — consistency and accuracy (`h1_h3/`)
 

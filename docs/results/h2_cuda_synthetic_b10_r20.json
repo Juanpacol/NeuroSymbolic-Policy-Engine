@@ -1,0 +1,138 @@
+{
+  "schema_version": 2,
+  "environment": {
+    "torch_version": "2.10.0+cu128",
+    "clingo_version": "5.8.0",
+    "python_version": "3.12.13",
+    "platform": "Linux-6.12.90+-x86_64-with-glibc2.35",
+    "device": "cuda",
+    "git_commit": "74b35dc"
+  },
+  "policy_name": "synthetic_b10_r20",
+  "policy_fingerprint": "7fb4a7ee14eeb8dfa1a6117381d7a636678656c17b4fbc4c1c567bb1d588ccfc",
+  "results": [
+    {
+      "batch_size": 1,
+      "reasoner_product": {
+        "device": "cuda",
+        "batch_size": 1,
+        "warmup": 20,
+        "reps": 200,
+        "median_ms": 3.1644649505615234,
+        "p95_ms": 4.9013190269470215,
+        "p99_ms": 6.699120998382568,
+        "mean_ms": 3.3499650955200195,
+        "throughput_per_sec": 316.00918816388014,
+        "per_item_median_ms": 3.1644649505615234
+      },
+      "reasoner_crisp": {
+        "device": "cuda",
+        "batch_size": 1,
+        "warmup": 20,
+        "reps": 200,
+        "median_ms": 2.2162671089172363,
+        "p95_ms": 2.440065622329712,
+        "p99_ms": 2.6647841930389404,
+        "mean_ms": 2.229444742202759,
+        "throughput_per_sec": 451.2091507275731,
+        "per_item_median_ms": 2.2162671089172363
+      },
+      "clingo": {
+        "device": "cpu",
+        "batch_size": 1,
+        "warmup": 0,
+        "reps": 200,
+        "median_ms": 0.09199800342321396,
+        "p95_ms": 0.11230215430259705,
+        "p99_ms": 0.11808488517999649,
+        "mean_ms": 0.09520354866981506,
+        "throughput_per_sec": 10869.801112962728,
+        "per_item_median_ms": 0.09199800342321396
+      },
+      "speedup_median_crisp": 0.041510340993220735,
+      "speedup_median_product": 0.029072214374467706
+    },
+    {
+      "batch_size": 64,
+      "reasoner_product": {
+        "device": "cuda",
+        "batch_size": 64,
+        "warmup": 20,
+        "reps": 200,
+        "median_ms": 3.2154040336608887,
+        "p95_ms": 3.4930286407470703,
+        "p99_ms": 3.7585413455963135,
+        "mean_ms": 3.2511661052703857,
+        "throughput_per_sec": 19904.186015196665,
+        "per_item_median_ms": 0.050240688025951385
+      },
+      "reasoner_crisp": {
+        "device": "cuda",
+        "batch_size": 64,
+        "warmup": 20,
+        "reps": 200,
+        "median_ms": 2.2156589031219482,
+        "p95_ms": 2.433755874633789,
+        "p99_ms": 2.5422754287719727,
+        "mean_ms": 2.24649715423584,
+        "throughput_per_sec": 28885.31258571504,
+        "per_item_median_ms": 0.03461967036128044
+      },
+      "clingo": {
+        "device": "cpu",
+        "batch_size": 64,
+        "warmup": 0,
+        "reps": 200,
+        "median_ms": 5.917994022369385,
+        "p95_ms": 6.42401123046875,
+        "p99_ms": 6.979691505432129,
+        "mean_ms": 5.992731094360352,
+        "throughput_per_sec": 10814.475269506329,
+        "per_item_median_ms": 0.09246865659952164
+      },
+      "speedup_median_crisp": 2.6709860502583247,
+      "speedup_median_product": 1.8405133415322212
+    },
+    {
+      "batch_size": 1024,
+      "reasoner_product": {
+        "device": "cuda",
+        "batch_size": 1024,
+        "warmup": 20,
+        "reps": 200,
+        "median_ms": 3.2227110862731934,
+        "p95_ms": 3.513399362564087,
+        "p99_ms": 4.352039337158203,
+        "mean_ms": 3.2484374046325684,
+        "throughput_per_sec": 317744.89632707776,
+        "per_item_median_ms": 0.0031471787951886654
+      },
+      "reasoner_crisp": {
+        "device": "cuda",
+        "batch_size": 1024,
+        "warmup": 20,
+        "reps": 200,
+        "median_ms": 2.249377965927124,
+        "p95_ms": 2.473846197128296,
+        "p99_ms": 2.6247308254241943,
+        "mean_ms": 2.2706611156463623,
+        "throughput_per_sec": 455236.9657350755,
+        "per_item_median_ms": 0.002196658169850707
+      },
+      "clingo": {
+        "device": "cpu",
+        "batch_size": 1024,
+        "warmup": 0,
+        "reps": 200,
+        "median_ms": 96.02328491210938,
+        "p95_ms": 103.58881378173828,
+        "p99_ms": 111.61457824707031,
+        "mean_ms": 97.03654479980469,
+        "throughput_per_sec": 10664.0800815893,
+        "per_item_median_ms": 0.09377273917198181
+      },
+      "speedup_median_crisp": 42.688817249319655,
+      "speedup_median_product": 29.795809286507463
+    }
+  ]
+}
