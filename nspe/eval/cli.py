@@ -81,7 +81,7 @@ def run_eval(
     clip_pretrained: str = "openai",
     hidden_dim: int = 256,
     cache_dir: str | None = None,
-    threshold: float | None = None,
+    threshold: float | tuple[float, float] | None = None,
     learnable_confidence: bool = False,
     aggregate: str = "tconorm",
     pmean_p: float = 2.0,
@@ -104,8 +104,10 @@ def run_eval(
         cache_dir: directory of precomputed CLIP embeddings, reusing the
             training cache so evaluation does not re-encode the split.
         threshold: verdict threshold. ``None`` fits one per model on
-            this split, which is only legitimate for validation -- pass
-            the validation-fitted value when reporting test.
+            this split, which is only legitimate for validation; a float
+            shares one point across both arms; a ``(reasoner,
+            baseline)`` pair gives each its own, which is what a test
+            run needs. See :func:`resolve_thresholds`.
         learnable_confidence: whether the checkpoint was trained with
             trainable rule confidences.
         aggregate: how rules sharing a head combine. Must match what the
@@ -253,6 +255,81 @@ def run_eval(
     }
 
 
+def resolve_thresholds(
+    args: argparse.Namespace,
+) -> float | tuple[float, float] | None:
+    """Resolves this run's operating point from the CLI flags.
+
+    ``--thresholds-from`` exists because the threshold has to belong to
+    the checkpoint it is applied to. Checkpoints are gitignored, so a
+    test run is necessarily evaluated against weights retrained in that
+    session, and the calibrator's operating point is not stable across
+    retrains even at a fixed seed -- reusing a threshold from an older
+    artifact would be a silent protocol error. Reading it out of the
+    validation results produced by *these* checkpoints removes both the
+    transcription step and that hazard, and lets the backbone be
+    cross-checked against the artifact that fitted it.
+
+    Args:
+        args: a namespace from the evaluation CLI's parser.
+
+    Returns:
+        ``None`` to fit per arm on the evaluated split, a float for one
+        shared threshold, or a ``(reasoner, baseline)`` pair.
+
+    Raises:
+        ValueError: if the split is ``"test"`` and no threshold source
+            was given, if only one per-arm flag was passed, or if the
+            source artifact was not itself fitted or came from a
+            different backbone.
+    """
+    if args.reasoner_threshold is not None or args.baseline_threshold is not None:
+        if args.reasoner_threshold is None or args.baseline_threshold is None:
+            raise ValueError(
+                "--reasoner-threshold and --baseline-threshold must be "
+                "given together; they are one operating point per arm"
+            )
+        return (args.reasoner_threshold, args.baseline_threshold)
+
+    if args.thresholds_from is not None:
+        source = json.loads(Path(args.thresholds_from).read_text())
+        h3 = source["h3_explainability"]
+        if h3.get("threshold_source") != "fitted":
+            raise ValueError(
+                f"{args.thresholds_from} has threshold_source="
+                f"{h3.get('threshold_source')!r}; chaining a threshold that "
+                "was itself provided says nothing about where it came from"
+            )
+
+        recorded = source.get("reasoner_config", {}).get("clip_model")
+        if recorded is not None and recorded != args.clip_model:
+            raise ValueError(
+                f"{args.thresholds_from} was produced with clip_model="
+                f"{recorded!r} but this run uses {args.clip_model!r}"
+            )
+        if source.get("policy_fingerprint") not in (None, _fingerprint(args.policy)):
+            print(
+                f"WARNING: {args.thresholds_from} has a different "
+                "policy_fingerprint than this run's policy"
+            )
+        # h3_explainability, never h1_consistency: the latter's rates are
+        # taken at the H1 verdict threshold of 0.5, a different point.
+        return (h3["reasoner"]["threshold"], h3["baseline"]["threshold"])
+
+    if args.split == "test":
+        raise ValueError(
+            "refusing to fit a threshold on the test split: pass "
+            "--thresholds-from <validation results.json> (or explicit "
+            "--reasoner-threshold/--baseline-threshold) so the operating "
+            "point comes from validation"
+        )
+    return args.threshold
+
+
+def _fingerprint(policy_path: str) -> str:
+    return PolicyKGReasoner(load_policy(policy_path)).rule_tensor.fingerprint
+
+
 def _print_markdown(result: dict[str, Any]) -> None:
     h1 = result["h1_consistency"]
     print("### H1 consistency")
@@ -342,17 +419,33 @@ def main() -> None:
         default=None,
         help="Reuse the training embedding cache instead of re-encoding.",
     )
-    parser.add_argument(
+    point = parser.add_mutually_exclusive_group()
+    point.add_argument(
         "--threshold",
         type=float,
         default=None,
-        help="Verdict threshold. Omit to fit one per model on this "
-        "split -- legitimate for validation only. When reporting test, "
-        "pass the value fitted on validation.",
+        help="One verdict threshold shared by both arms. Omit to fit "
+        "per arm on this split -- legitimate for validation only.",
     )
+    point.add_argument(
+        "--thresholds-from",
+        type=str,
+        default=None,
+        help="Read each arm's threshold from a validation results JSON "
+        "produced by these same checkpoints. Required for --split test.",
+    )
+    parser.add_argument(
+        "--reasoner-threshold",
+        type=float,
+        default=None,
+        help="Explicit per-arm operating point; use with "
+        "--baseline-threshold when there is no validation artifact.",
+    )
+    parser.add_argument("--baseline-threshold", type=float, default=None)
     parser.add_argument("--out", type=str, default=None)
     args = parser.parse_args()
 
+    thresholds = resolve_thresholds(args)
     policy = load_policy(args.policy)
     eval_result = run_eval(
         args.policy,
@@ -365,7 +458,7 @@ def main() -> None:
         clip_pretrained=args.clip_pretrained,
         hidden_dim=args.hidden_dim,
         cache_dir=args.cache_dir,
-        threshold=args.threshold,
+        threshold=thresholds,
         learnable_confidence=args.learnable_confidence,
         aggregate=args.aggregate,
         pmean_p=args.pmean_p,
