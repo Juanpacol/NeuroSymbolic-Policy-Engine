@@ -71,6 +71,9 @@ class ClingoEngine:
         self.policy = policy
         self.base_names = policy.predicate_names("base")
         self._atoms = {name: clingo.Function(name) for name in self.base_names}
+        self._verdict_atoms = {
+            name: clingo.Function(name) for name in policy.predicate_names("verdict")
+        }
 
         choice_rules = "\n".join(f"{{{name}}}." for name in self.base_names)
         program = f"{choice_rules}\n{policy_to_asp(policy)}"
@@ -98,3 +101,35 @@ class ClingoEngine:
                 derived = {str(sym) for sym in model.symbols(atoms=True)}
                 break
         return derived
+
+    def infer_verdicts(self, facts: set[str]) -> set[str]:
+        """Derives only the verdict atoms for one crisp fact set.
+
+        Same solve as :meth:`infer`, without converting every atom in
+        the model to a Python string. That conversion is O(atoms) and
+        grows with the rule base -- measured at 21% of per-case cost on
+        the bundled policies and 37% on a 200-rule synthetic one -- so
+        timing :meth:`infer` charges the baseline for building a
+        representation a deployment would not need. A policy engine is
+        asked for verdicts, which is also all the reasoner's timed path
+        produces, so this is the fair comparison point for the
+        benchmark.
+
+        Args:
+            facts: names of base predicates that are true; every other
+                base predicate is assumed false.
+
+        Returns:
+            Names of the verdict predicates true in the stable model.
+        """
+        assumptions = [(atom, name in facts) for name, atom in self._atoms.items()]
+        verdicts: set[str] = set()
+        with self.control.solve(assumptions=assumptions, yield_=True) as handle:
+            for model in handle:
+                verdicts = {
+                    name
+                    for name, atom in self._verdict_atoms.items()
+                    if model.contains(atom)
+                }
+                break
+        return verdicts

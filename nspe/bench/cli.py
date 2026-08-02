@@ -182,9 +182,12 @@ def run_sweep(
         def crisp_call(mu0: torch.Tensor = mu0_crisp) -> None:
             reasoner_crisp(mu0)
 
+        # infer_verdicts, not infer: the latter stringifies every atom in
+        # the model, which is work the reasoner's timed path never does
+        # and which grows with the rule base.
         def clingo_call(fact_sets: list[set[str]] = fact_sets) -> None:
             for facts in fact_sets:
-                engine.infer(facts)
+                engine.infer_verdicts(facts)
 
         product_stats = benchmark(
             product_call, device=device, warmup=warmup, reps=reps, batch_size=batch_size

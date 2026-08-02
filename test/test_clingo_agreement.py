@@ -75,5 +75,28 @@ class TestClingoAgreesWithReasoner(TestCase):
                 )
 
 
+class TestInferVerdictsMatchesInfer(TestCase):
+    """The benchmark times ``infer_verdicts``; agreement is proved for
+    ``infer``. If the fast path ever diverged, the certified comparison
+    and the timed one would quietly come apart.
+    """
+
+    def test_agreement_across_random_policies(self):
+        for seed in range(30):
+            policy = _make_random_acyclic_policy(seed)
+            engine = ClingoEngine(policy)
+            base_names = policy.predicate_names("base")
+            verdict_names = set(policy.predicate_names("verdict"))
+            rng = random.Random(seed)
+
+            for _ in range(5):
+                facts = {b for b in base_names if rng.random() < 0.5}
+                self.assertEqual(
+                    engine.infer_verdicts(facts),
+                    engine.infer(facts) & verdict_names,
+                    f"seed={seed} facts={sorted(facts)}",
+                )
+
+
 if __name__ == "__main__":
     run_tests()
