@@ -35,36 +35,68 @@ print(torch.__version__, "cuda:", torch.cuda.is_available(), torch.cuda.get_devi
 Everything should pass, including `test_clingo_agreement.py` — that is
 the gate that makes the timing numbers below meaningful at all.
 
-### Cell 4 — run the benchmark sweep on the bundled example policy
+Each sweep times three arms per batch size, and which one you quote
+matters — see `docs/h2_findings.md` for the reasoning:
+
+- `reasoner_crisp` — the crisp t-norm over the *same* fact sets Clingo
+  receives. The only arm whose verdicts are certified identical to
+  Clingo's (that is what `test_clingo_agreement.py` proves), so it is
+  the arm a speedup claim should lead with.
+- `reasoner_product` — the deployed configuration: graded truth degrees
+  under the product t-norm.
+- `clingo` — the baseline, timed via `infer_verdicts` so it is not
+  charged for stringifying every atom in its model.
+
+### Cell 4 — sweep on the bundled example policy (CUDA)
 
 ```python
 !python -m nspe.bench.cli \
   --device cuda \
   --batch-sizes 1 8 64 256 1024 8192 \
-  --warmup 20 \
-  --reps 200 \
-  --out bench_results/cuda_meta_policy.json
+  --warmup 20 --reps 200 --clingo-budget-s 30 \
+  --out bench_results/h2_cuda_meta.json
 ```
 
-### Cell 5 — run the same sweep on synthetic policies at increasing scale
+### Cell 4b — the same sweep on CPU
 
-This characterizes the dense/sparse kernel crossover and where Clingo's
-grounding starts to fall behind as the rule base grows — useful for the
-paper's scaling figure. There is no CLI flag for synthetic policies
-yet, so run it directly:
+Not optional. The headline speedup conflates three separate advantages
+— vectorization, GPU hardware, and batching — and this is what
+separates them. At `batch=1` on CPU, hardware and batching are held
+fixed, so the comparison is purely "vectorized fuzzy evaluation vs.
+stable-model search"; the CPU→CUDA delta at large batch is what the GPU
+buys. Expect Clingo to *win* at batch 1: that is the honest result, and
+reporting it is what makes the batched numbers credible.
 
 ```python
-from nspe.data.synthetic import make_layered_policy
-from nspe.bench.cli import run_sweep, _print_markdown
-import json
+!python -m nspe.bench.cli \
+  --device cpu \
+  --batch-sizes 1 8 64 256 1024 \
+  --warmup 20 --reps 200 --clingo-budget-s 30 \
+  --out bench_results/h2_cpu_meta.json
+```
 
-for num_base, num_rules in [(10, 20), (50, 200), (100, 1000)]:
-    policy = make_layered_policy(num_base, num_rules, seed=0)
-    rows = run_sweep(policy, "cuda", (1, 64, 1024), warmup=20, reps=200)
-    print(f"\n=== base={num_base} rules={num_rules} ===")
-    _print_markdown(rows)
-    with open(f"bench_results/cuda_synthetic_b{num_base}_r{num_rules}.json", "w") as f:
-        json.dump(rows, f, indent=2)
+### Cell 5 — scaling with the rule base
+
+One cell each, so a disconnect costs at most one sweep. Capped at batch
+1024: at 8192 on `b100_r1000` a single Clingo rep is 8192 solves over a
+1000-rule ground program.
+
+```python
+!python -m nspe.bench.cli --device cuda --synthetic 10 20 \
+  --batch-sizes 1 64 1024 --warmup 20 --reps 200 --clingo-budget-s 30 \
+  --out bench_results/h2_cuda_synthetic_b10_r20.json
+```
+
+```python
+!python -m nspe.bench.cli --device cuda --synthetic 50 200 \
+  --batch-sizes 1 64 1024 --warmup 20 --reps 200 --clingo-budget-s 30 \
+  --out bench_results/h2_cuda_synthetic_b50_r200.json
+```
+
+```python
+!python -m nspe.bench.cli --device cuda --synthetic 100 1000 \
+  --batch-sizes 1 64 1024 --warmup 20 --reps 200 --clingo-budget-s 30 \
+  --out bench_results/h2_cuda_synthetic_b100_r1000.json
 ```
 
 ### Cell 6 — download the results
@@ -76,15 +108,20 @@ shutil.make_archive("bench_results", "zip", "bench_results")
 files.download("bench_results.zip")
 ```
 
-Send the `bench_results.zip` back and it gets folded into the paper's
-benchmark tables/figures.
-
 ## Notes
 
-- `bench_results/` is gitignored on purpose (raw benchmark output is
-  environment-specific and shouldn't be committed as source); it's
-  meant to be generated fresh per machine and attached to the paper
-  separately.
+- **`bench_results/` is gitignored; `docs/results/` is not.** Raw sweep
+  output is environment-specific scratch and is regenerated per
+  machine. The curated subset that backs a table in the paper is copied
+  into `docs/results/` and committed deliberately, so every number in
+  the paper is checkable. See `docs/results/README.md`.
+- `--clingo-budget-s` sizes Clingo's rep count by wall clock rather
+  than a fixed integer, because one Clingo rep is `batch_size`
+  sequential solves. Raise it to 60 for the final run if the printed
+  `clingo.reps` at the largest batch drops near its floor of 5.
+- Clingo's `p95_ms`/`p99_ms` are per-batch aggregates over many solves,
+  not per-case latencies, so they are **not** comparable to the
+  reasoner's. Compare `per_item_median_ms` across arms.
 - If Colab disconnects mid-sweep, just re-run from Cell 1 — nothing here
   depends on prior state.
 - Free-tier Colab GPUs are shared and can vary run-to-run; if the

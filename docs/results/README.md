@@ -1,0 +1,45 @@
+# Committed result artifacts
+
+Every number quoted in the paper or in `docs/*_findings.md` should be
+traceable to a file here, and every file here should name the command
+that produced it and the machine it ran on.
+
+This directory is deliberately **not** `bench_results/` or
+`eval_results/`, which stay gitignored: those hold raw, per-machine
+sweep output that is regenerated freely. What lands here is the curated
+subset that backs a claim, copied in and `git add`ed on purpose. The
+curation is the point — do not automate it.
+
+Each JSON already carries its own provenance: `environment` (torch and
+clingo versions, platform, device, git commit), `policy_fingerprint`
+(content hash of the compiled rule set), and for evaluation runs a
+`reasoner_config` block recording the settings that do not live in the
+checkpoint.
+
+## H2 — latency (`h2_*.json`)
+
+Schema version 2. Three timed arms per batch size: `reasoner_crisp`
+(certified identical to Clingo, the arm speedup claims should lead
+with), `reasoner_product` (the deployed configuration), and `clingo`.
+
+| file | command | machine |
+|---|---|---|
+| `h2_cpu_m5_meta.json` | `python -m nspe.bench.cli --device cpu --batch-sizes 1 8 64 256 --warmup 20 --reps 100 --clingo-budget-s 10` | Apple M5, macOS 26.4.1, torch 2.13.0, clingo 5.8.0 |
+| _CUDA sweeps pending_ | see `docs/colab_benchmark.md` Cells 4/4b/5 | T4 |
+
+## H1/H3 — consistency and accuracy (`h1_h3/`)
+
+| file | command | machine |
+|---|---|---|
+| _(pending)_ | | |
+
+## Reading these
+
+- Compare `per_item_median_ms` across arms, not `median_ms`: one
+  reasoner rep is a batched forward, one Clingo rep is `batch_size`
+  sequential solves.
+- Clingo's `p95_ms`/`p99_ms` are per-batch aggregates, not per-case
+  tails, and are not comparable to the reasoner's.
+- The CPU and CUDA sweeps exist as a pair. The CPU `batch=1` row holds
+  hardware and batching fixed and is the cleanest vectorization-vs-search
+  comparison; the rest of the speedup is batching and GPU.
