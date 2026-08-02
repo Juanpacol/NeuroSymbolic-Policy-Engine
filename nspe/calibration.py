@@ -91,9 +91,13 @@ class VerdictCalibrator(nn.Module):
 
         Args:
             verdict: truth degrees from an untrained forward pass over
-                the training split, shape ``(n,)``.
+                the training split, shape ``(n,)``. Accepted on any
+                device: callers accumulate this across batches and
+                often move it to CPU to do so, while the calibrator
+                itself may be on GPU.
             base_rate: fraction of positive labels in that split.
         """
+        verdict = verdict.to(self.bias.device)
         clamped = verdict.clamp(self.eps, 1.0 - self.eps)
         logits = self.scale() * torch.logit(clamped)
         target = math.log(base_rate / (1.0 - base_rate))

@@ -5,6 +5,8 @@ operating point of a compressed verdict distribution, and must be unable
 to manufacture ranking quality that was not already there.
 """
 
+import unittest
+
 import torch
 from torch.testing._internal.common_utils import TestCase, run_tests
 
@@ -41,6 +43,21 @@ class TestVerdictCalibrator(TestCase):
     def test_rejects_nonpositive_init_scale(self):
         with self.assertRaises(ValueError):
             VerdictCalibrator(init_scale=0.0)
+
+    @unittest.skipUnless(torch.cuda.is_available(), "needs a second device")
+    def test_fit_bias_to_base_rate_accepts_an_off_device_verdict(self):
+        """Regression: callers accumulate verdicts across batches and
+        commonly move them to CPU to do so (nspe.train.cli._warm_start
+        does exactly this), while the calibrator itself may be on GPU.
+        """
+        calibrator = VerdictCalibrator().to("cuda")
+        verdict = (0.1387 + 0.004 * torch.randn(64)).cpu()
+
+        calibrator.fit_bias_to_base_rate(verdict, base_rate=0.35)
+
+        self.assertLess(
+            abs(calibrator(verdict.to("cuda")).mean().item() - 0.35), 0.01
+        )
 
     def test_fit_bias_to_base_rate(self):
         torch.manual_seed(0)
