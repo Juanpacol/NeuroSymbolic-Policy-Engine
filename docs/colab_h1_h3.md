@@ -113,7 +113,26 @@ for model in ("reasoner", "baseline"):
           f"accuracy {np.mean(acc):.4f} ± {np.std(acc):.4f}")
 ```
 
-### Cell 8 — download checkpoints and results
+### Cell 8 — ablation sweep (Phase 4)
+
+Once the headline numbers are in, one command runs the whole ablation
+table: 6 configurations x 3 seeds, reusing one baseline per seed.
+
+```python
+!{sys.executable} -m nspe.ablate.cli \
+  --clip-model ViT-L-14 --clip-pretrained openai \
+  --cache-dir /kaggle/working/emb_cache \
+  --device cuda \
+  --ckpt-dir /kaggle/working/checkpoints/ablations \
+  --out /kaggle/working/ablations.json
+```
+
+Rerunning the same command skips whatever already landed in
+`ablations.json`, so a dropped session costs at most one run. Narrow to
+a single configuration with `--configs pmean`, and see
+`--help` for the full list.
+
+### Cell 9 — download checkpoints and results
 
 ```python
 import shutil
