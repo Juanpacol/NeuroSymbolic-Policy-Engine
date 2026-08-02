@@ -82,56 +82,91 @@ policy:
 - **`b0eb9bf`** -- `p_mean_segment` wired as an opt-in
   `--aggregate pmean` ablation (default stays the t-conorm).
 
-## First real-data validation (3 seeds, ViT-L-14, validation split)
+## Real-data validation (5 seeds, two backbones, validation split)
 
 Ran via `docs/colab_h1_h3.md` on Kaggle T4. Full per-seed output lives
-in `neuropolicy-analisis-3.ipynb` (not checked in); this is the
-distilled result.
+in `neuropolicy-analisis-3.ipynb`/`results_b32_s*.json` (not checked
+in); this is the distilled result. `--seed 0..4`, `--epochs 30`, other
+flags at their defaults (`--lambda-anchor 0.1`, `--select-metric
+auroc`).
 
-| | reasoner | baseline |
-|---|---|---|
-| AUROC | **0.7168 ± 0.0066** | 0.6872 ± 0.0097 |
-| accuracy | **0.6237 ± 0.0056** | 0.5764 ± 0.0229 |
-| num_classes (of 64) | 52 / 57 / 38 | -- |
-| majority-class accuracy | 0.5680 | 0.5680 |
+| | ViT-L-14 reasoner | ViT-L-14 baseline | ViT-B-32 reasoner | ViT-B-32 baseline |
+|---|---|---|---|---|
+| AUROC | **0.7193 ± 0.0060** | 0.6866 ± 0.0096 | **0.6933 ± 0.0052** | 0.6693 ± 0.0076 |
+| accuracy | 0.6253 ± 0.0170 | 0.5853 ± 0.0239 | 0.5930 ± 0.0184 | 0.5653 ± 0.0253 |
+| adjusted_consistency | **0.6703 ± 0.1504** | 0.2998 ± 0.1025 | 0.4662 ± 0.1814 | 0.3835 ± 0.0586 |
+| majority-class accuracy | 0.5680 | 0.5680 | 0.5680 | 0.5680 |
 
-Per-seed `adjusted_consistency` (reasoner vs. baseline): **0.73 vs.
-0.29**, **0.51 vs. 0.35**, **0.71 vs. 0.46** -- the reasoner wins H1 in
-all 3 seeds, and neither arm is `degenerate` in any seed
-(`positive_rate` stays in `[0.39, 0.50]`), so the win is not the
-constant-model artifact the pre-remediation numbers had.
+Both backbones/arms clear majority-class, and `positive_rate` stayed in
+a non-degenerate range in every one of the 20 runs (5 seeds × 2 models
+× 2 backbones) -- no arm ever won by predicting a single class.
 
-Read against the targets in the remediation plan (AUROC 0.68-0.72,
-`num_classes` 20-45 of 64): both landed inside range. Both arms clear
-majority-class for the first time.
+### Two different findings, of different strength
+
+**AUROC gap is the robust result.** Reasoner beats baseline on AUROC in
+all 10 seeds across both backbones, gap always positive
+(ViT-L-14: [0.0031, 0.0454, 0.0072, 0.0362, ...]; ViT-B-32: [0.0074,
+0.0276, 0.0269, 0.0255, 0.0325]). This is the number to lead with for
+H3.
+
+**H1 (consistency) advantage is backbone-dependent, and this matters.**
+Per-seed reasoner `adjusted_consistency`:
+
+- ViT-L-14: `[0.7334, 0.5094, 0.7079, 0.5003, 0.9004]` -- reasoner wins
+  **5/5** seeds against baseline.
+- ViT-B-32: `[0.5646, 0.5617, 0.2074, 0.6945, 0.3028]` -- reasoner wins
+  only **3/5** seeds; the baseline outright wins seeds 2 and 4 (0.377
+  and 0.421 vs. the reasoner's 0.207 and 0.303 respectively).
+
+Read together: with richer features (ViT-L-14) the reasoner's
+structural advantage on consistency is large and never reverses; with
+weaker features (ViT-B-32) that advantage shrinks by more than half and
+becomes unreliable seed-to-seed. This is consistent with an intuitive
+mechanism -- a fixed rule circuit only has an advantage if the
+predicate layer under it is discriminating well -- but is reported here
+as an observed correlation across two backbones, not a proven causal
+claim; it would need a controlled sweep (e.g. degrading ViT-L-14
+features synthetically) to go further than that.
+
+**accuracy_gap is not reliable at either backbone.** Per-seed sign
+flips at both ViT-L-14 and ViT-B-32 (e.g. ViT-B-32: `[-0.0181, +0.0325,
+-0.0229, +0.0590, +0.0878]`). Don't report accuracy_gap as a headline
+number; AUROC is threshold-free and doesn't have this problem.
 
 ### Open observations, not yet investigated
 
-- **Baseline is far less stable across seeds** than the reasoner
-  (accuracy std 0.023 vs. 0.006; seed 2 baseline drops to 0.546
-  accuracy / 0.487 precision). Worth a sentence in the paper either
-  way: it's suggestive that the fixed rule structure acts as a
-  regularizer relative to a learned aggregator, but 3 seeds is not
-  enough to claim that -- it needs more seeds or a stability metric
-  before it's a result rather than an anecdote.
+- **Baseline is less stable across seeds than the reasoner** at both
+  backbones (accuracy std ~0.024-0.025 vs. ~0.017-0.019). Consistent
+  with the H1 finding above -- a learned aggregator over the latent
+  predicate layer appears to be a less stable solution than a fixed
+  rule circuit over it -- but again, an observation worth a sentence in
+  the paper, not yet a controlled result.
 - **Late-training overfitting is visible but handled.** Validation loss
-  climbs sharply past the best epoch in every run shown (e.g. one
+  climbs sharply past the best epoch in most runs (e.g. one ViT-L-14
   reasoner run: 0.89 → 2.06 from epoch 4 to epoch 9); early stopping on
   AUROC is cutting at the right point, but if `--patience` is loosened
   this will need weight decay retuning.
+- **Checkpoint disk usage.** Each checkpoint now includes the full
+  frozen-CLIP state dict (~1.7GB at ViT-L-14). Running 5 seeds × 2
+  models at both backbones in one Kaggle session exhausted
+  `/kaggle/working`'s disk quota mid-run (`RuntimeError: [enforce fail
+  at inline_container.cc:668]` from `torch.save`); delete `.pt` files
+  for checkpoints already evaluated (their `results_*.json` is what
+  matters) before starting the next backbone/seed batch. Worth fixing
+  properly later by not serializing frozen CLIP weights into every
+  checkpoint.
 
 ## What's still open (remediation plan phases not yet run)
 
-- **More seeds.** 3 is the plan's floor, not a target; the baseline
-  instability above is reason to go to 5+ before reporting a final
-  number.
-- **Phase 4 ablations**, implemented but not yet run:
-  `--clip-model ViT-B-32-quickgelu` as a second reported row,
-  `--learnable-confidence`, `--aggregate pmean`, `--lambda-anchor` sweep
-  at `{0, 0.03, 0.1, 0.3}` (currently defaults to `0.1`, never varied).
+- **Phase 4 ablations not yet run**: `--learnable-confidence`,
+  `--aggregate pmean`, `--lambda-anchor` sweep at `{0, 0.03, 0.1, 0.3}`
+  (currently defaults to `0.1`, never varied). The backbone comparison
+  (ViT-L-14 vs. ViT-B-32) above is done.
+- **A controlled test of the backbone-dependence hypothesis** for H1,
+  if it's worth pursuing further than the observational finding above.
 - **Test split.** Explicitly gated in the plan until validation is
-  stable across seeds -- do not touch `--split test` before that, and
-  when it happens, pass `--threshold` fitted on validation rather than
+  stable across seeds -- now that it is (5 seeds, two backbones), this
+  is unblocked, but pass `--threshold` fitted on validation rather than
   letting `compute_h3` fit-and-report on the same split.
 - **H2 latency numbers** (`docs/colab_benchmark.md`) are a separate
   track and unaffected by any of this.
