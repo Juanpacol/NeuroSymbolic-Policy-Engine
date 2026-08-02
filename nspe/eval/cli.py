@@ -82,6 +82,9 @@ def run_eval(
     hidden_dim: int = 256,
     cache_dir: str | None = None,
     threshold: float | None = None,
+    learnable_confidence: bool = False,
+    aggregate: str = "tconorm",
+    pmean_p: float = 2.0,
 ) -> dict[str, Any]:
     """Runs the reasoner and baseline over one split and computes H1/H3.
 
@@ -103,6 +106,15 @@ def run_eval(
         threshold: verdict threshold. ``None`` fits one per model on
             this split, which is only legitimate for validation -- pass
             the validation-fitted value when reporting test.
+        learnable_confidence: whether the checkpoint was trained with
+            trainable rule confidences.
+        aggregate: how rules sharing a head combine. Must match what the
+            checkpoint was trained with: unlike the weights, this is
+            plain Python state and is *not* carried in the state dict,
+            so a mismatch silently evaluates the model under an
+            aggregation it never saw.
+        pmean_p: power for ``aggregate="pmean"``, likewise not carried
+            in the state dict.
 
     Returns:
         A dict with ``dataset``, ``h1_consistency``, and
@@ -121,7 +133,13 @@ def run_eval(
         # descriptions here would just be overwritten by load_state_dict.
         init_from_descriptions=False,
     )
-    reasoner = PolicyKGReasoner(policy, store_trace=False)
+    reasoner = PolicyKGReasoner(
+        policy,
+        store_trace=False,
+        learnable_confidence=learnable_confidence,
+        aggregate=aggregate,
+        pmean_p=pmean_p,
+    )
     # The training CLI checkpoints the whole PolicyEngine, so the state
     # dict is keyed "extractor.*"/"reasoner.*"/"calibrator.*"; load it
     # as one. Both arms are built with a calibrator so the shapes match
@@ -220,6 +238,16 @@ def run_eval(
             "split": split,
             "num_examples": num_examples,
         },
+        # Recorded because none of it lives in the checkpoint, so a
+        # results file is otherwise ambiguous about what was evaluated.
+        "reasoner_config": {
+            "learnable_confidence": learnable_confidence,
+            "aggregate": aggregate,
+            "pmean_p": pmean_p,
+            "clip_model": clip_model,
+            "clip_pretrained": clip_pretrained,
+            "hidden_dim": hidden_dim,
+        },
         "h1_consistency": h1,
         "h3_explainability": h3,
     }
@@ -295,6 +323,20 @@ def main() -> None:
     parser.add_argument("--clip-pretrained", default="openai")
     parser.add_argument("--hidden-dim", type=int, default=256)
     parser.add_argument(
+        "--learnable-confidence",
+        action="store_true",
+        help="Set if the checkpoint was trained with --learnable-confidence.",
+    )
+    parser.add_argument(
+        "--aggregate",
+        default="tconorm",
+        choices=["tconorm", "pmean"],
+        help="Must match the checkpoint's training setting: aggregation "
+        "is not carried in the state dict, so a mismatch silently "
+        "evaluates the model under an aggregation it never saw.",
+    )
+    parser.add_argument("--pmean-p", type=float, default=2.0)
+    parser.add_argument(
         "--cache-dir",
         type=str,
         default=None,
@@ -324,6 +366,9 @@ def main() -> None:
         hidden_dim=args.hidden_dim,
         cache_dir=args.cache_dir,
         threshold=args.threshold,
+        learnable_confidence=args.learnable_confidence,
+        aggregate=args.aggregate,
+        pmean_p=args.pmean_p,
     )
     _print_markdown(eval_result)
 

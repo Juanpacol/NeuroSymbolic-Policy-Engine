@@ -190,5 +190,26 @@ class TestAggregationMode(TestCase):
         with self.assertRaises(ValueError):
             PolicyKGReasoner(self._policy(), aggregate="mean")
 
+    def test_aggregate_is_not_carried_by_the_state_dict(self):
+        """Why evaluation has to be told the aggregation explicitly.
+
+        ``aggregate`` is plain Python state, so two reasoners that
+        disagree about it are indistinguishable from their checkpoints.
+        Loading a pmean checkpoint into a default reasoner therefore
+        succeeds and silently evaluates it under a t-conorm.
+        """
+        mu0 = torch.full((1, 3), 0.6)
+        tconorm = PolicyKGReasoner(self._policy(), aggregate="tconorm")
+        pmean = PolicyKGReasoner(self._policy(), aggregate="pmean")
+
+        self.assertEqual(set(tconorm.state_dict()), set(pmean.state_dict()))
+        for key, value in tconorm.state_dict().items():
+            self.assertEqual(value, pmean.state_dict()[key])
+
+        self.assertNotEqual(
+            round(tconorm(mu0).verdicts["v"].item(), 6),
+            round(pmean(mu0).verdicts["v"].item(), 6),
+        )
+
 if __name__ == "__main__":
     run_tests()

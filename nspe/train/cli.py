@@ -113,6 +113,7 @@ def _build_model(args: argparse.Namespace) -> tuple[nn.Module, object]:
             store_trace=False,
             learnable_confidence=args.learnable_confidence,
             aggregate=args.aggregate,
+            pmean_p=args.pmean_p,
         )
         engine = PolicyEngine(extractor, reasoner, calibrator=calibrator)
         return engine, extractor.preprocess
@@ -330,6 +331,13 @@ def main() -> None:
         choices=["tconorm", "pmean"],
         help="How rules sharing a head combine. Ablation only: a "
         "t-conorm is what makes the output a fuzzy-logic verdict.",
+    )
+    parser.add_argument(
+        "--pmean-p",
+        type=float,
+        default=2.0,
+        help="Power for --aggregate pmean. 1 is the arithmetic mean, "
+        "larger approaches max.",
     )
     parser.add_argument(
         "--select-metric",
