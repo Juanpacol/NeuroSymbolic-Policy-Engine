@@ -31,6 +31,7 @@ from __future__ import annotations
 import argparse
 import json
 from collections.abc import Callable
+from typing import Any
 
 import torch
 from torch import Tensor, nn
@@ -278,8 +279,19 @@ def _warm_start(
     return base_rate, pos_weight
 
 
-def main() -> None:
-    """Entry point for ``python -m nspe.train.cli``."""
+def build_parser() -> argparse.ArgumentParser:
+    """Builds the training CLI parser.
+
+    Exposed so callers that drive training programmatically -- the
+    ablation sweep in :mod:`nspe.ablate.cli` -- can render a
+    configuration as an argument list and parse it here, instead of
+    hand-building a ``Namespace``. Every default and ``choices=``
+    constraint then stays in sync with a manual run by construction,
+    rather than by somebody remembering to update two places.
+
+    Returns:
+        The configured parser.
+    """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", required=True, choices=["reasoner", "baseline"])
     parser.add_argument(
@@ -373,8 +385,21 @@ def main() -> None:
         default=None,
         help="Write the per-epoch metric history to this JSON file.",
     )
-    args = parser.parse_args()
+    return parser
 
+
+def train_one(args: argparse.Namespace) -> dict[str, Any]:
+    """Runs one training configuration end to end.
+
+    Args:
+        args: a namespace from :func:`build_parser`.
+
+    Returns:
+        The :func:`~nspe.train.loop.train_model` result dict with an
+        ``args`` entry, matching what ``--metrics-out`` writes. Writing
+        that file is left to the caller, so a sweep can own its own
+        output without racing this one.
+    """
     set_seed(args.seed)
     model, preprocess = _build_model(args)
 
@@ -411,7 +436,11 @@ def main() -> None:
         checkpoint_path=args.out,
         resume_from=args.resume,
     )
+    return {"args": vars(args), **result}
 
+
+def _print_result(args: argparse.Namespace, result: dict[str, Any]) -> None:
+    """Prints the headline metrics for one training run."""
     best = result["history"][result["best_epoch"]]
     print(
         f"model={args.model} clip={args.clip_model} seed={args.seed} "
@@ -425,9 +454,16 @@ def main() -> None:
     print(f"train_losses={[round(x, 4) for x in result['train_losses']]}")
     print(f"val_losses={[round(x, 4) for x in result['val_losses']]}")
 
+
+def main() -> None:
+    """Entry point for ``python -m nspe.train.cli``."""
+    args = build_parser().parse_args()
+    result = train_one(args)
+    _print_result(args, result)
+
     if args.metrics_out is not None:
         with open(args.metrics_out, "w") as f:
-            json.dump({"args": vars(args), **result}, f, indent=2)
+            json.dump(result, f, indent=2)
         print(f"Wrote {args.metrics_out}")
     print(f"\nWrote {args.out}")
 
