@@ -132,7 +132,68 @@ Rerunning the same command skips whatever already landed in
 a single configuration with `--configs pmean`, and see
 `--help` for the full list.
 
-### Cell 9 — download checkpoints and results
+### Cell 9 — held-out test evaluation
+
+**Prerequisite: this must run in the same session as the training.**
+Checkpoints are gitignored, so a test run always evaluates weights
+retrained in that session — and the operating point a calibrator
+settles on is not stable across retrains even at a fixed seed. The
+thresholds therefore have to be re-fitted on validation *here*, against
+these exact weights; reusing the ones recorded in
+`docs/results/h1_h3/results_s*.json` would apply an operating point
+belonging to weights that no longer exist. `--thresholds-from` enforces
+the pairing, and the eval CLI refuses `--split test` without it.
+
+```python
+for seed in range(5):
+    !{sys.executable} -m nspe.train.cli --model reasoner \
+      --clip-model ViT-L-14 --clip-pretrained openai \
+      --cache-dir /kaggle/working/emb_cache --seed {seed} --epochs 30 \
+      --out /kaggle/working/checkpoints/reasoner_s{seed}.pt
+    !{sys.executable} -m nspe.train.cli --model baseline \
+      --clip-model ViT-L-14 --clip-pretrained openai \
+      --cache-dir /kaggle/working/emb_cache --seed {seed} --epochs 30 \
+      --out /kaggle/working/checkpoints/baseline_s{seed}.pt
+
+    # Validation first: this is what fits each arm's operating point.
+    !{sys.executable} -m nspe.eval.cli \
+      --clip-model ViT-L-14 --cache-dir /kaggle/working/emb_cache \
+      --reasoner-checkpoint /kaggle/working/checkpoints/reasoner_s{seed}.pt \
+      --baseline-checkpoint /kaggle/working/checkpoints/baseline_s{seed}.pt \
+      --split validation --device cuda \
+      --out /kaggle/working/results_val_s{seed}.json
+
+    # Test once, at the point validation just fitted.
+    !{sys.executable} -m nspe.eval.cli \
+      --clip-model ViT-L-14 --cache-dir /kaggle/working/emb_cache \
+      --reasoner-checkpoint /kaggle/working/checkpoints/reasoner_s{seed}.pt \
+      --baseline-checkpoint /kaggle/working/checkpoints/baseline_s{seed}.pt \
+      --split test --device cuda \
+      --thresholds-from /kaggle/working/results_val_s{seed}.json \
+      --out /kaggle/working/results_test_s{seed}.json
+```
+
+The first `--split test` triggers a one-time CLIP encode of the test
+split, shared by all five seeds. **Check the printed `num_examples`
+before trusting anything**: expect roughly 2400 of 3000 rows after the
+image-availability filter (validation goes 1040 → 831, about 80%). A
+number near 3000 means the filter changed; a much smaller one means
+something truncated, which matters here because this dataset's rows are
+ordered by label.
+
+Then aggregate:
+
+```python
+!{sys.executable} -m nspe.eval.aggregate '/kaggle/working/results_test_s*.json'
+!{sys.executable} -m nspe.eval.aggregate '/kaggle/working/results_val_s*.json'
+```
+
+Download **both** sets. The paired validation files are what show this
+rerun reproduces the published validation numbers within seed noise,
+which is the only evidence that the test table and the original
+validation table describe the same system.
+
+### Cell 10 — download checkpoints and results
 
 ```python
 import shutil
@@ -143,9 +204,9 @@ Then download via the notebook's Output tab (Kaggle) or `files.download(...)` (C
 
 ## Notes
 
-- Checkpoints now include the full frozen-CLIP state dict, so a
-  ViT-L-14 checkpoint is large (~1.7GB). Budget disk/download time
-  accordingly.
+- Checkpoints exclude the frozen CLIP backbone (it is rebuilt from the
+  pretrained tag on load), so they are ~1MB rather than ~1.7GB. That is
+  what makes a 20-run session fit in the disk quota.
 - `--cache-dir` embeddings are keyed by `(split, model_name,
   pretrained)` and refuse to load under a mismatched backbone -- delete
   the cache directory if you change `--clip-model`.
@@ -156,5 +217,13 @@ Then download via the notebook's Output tab (Kaggle) or `files.download(...)` (C
   fixed -- `results_s*.json` reports the raw `auroc_gap`/`accuracy_gap`/
   `f1_gap` (reasoner minus baseline) for the paper's methods section to
   interpret, not a pass/fail verdict.
-- Only evaluate `--split test` once, with a threshold fitted on
-  `validation` passed explicitly via `--threshold`. See findings doc.
+- Only evaluate `--split test` once, and pass the operating point via
+  `--thresholds-from <validation results.json>` produced by the same
+  checkpoints. The CLI refuses to fit a threshold on test, and
+  `compute_h3` refuses a single-class label set outright — this
+  dataset's rows are ordered by label, so a truncated split would
+  otherwise report AUROC 0.5 and an `auroc_gap` of exactly 0.0, which
+  reads as a real null result. See `docs/h1_h3_findings.md`.
+- `python -m nspe.eval.aggregate '<glob>'` derives the mean±std tables
+  from result JSONs, grouping by split and backbone so validation and
+  test never average together.
