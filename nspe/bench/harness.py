@@ -27,10 +27,19 @@ class TimingStats:
         warmup: number of discarded warmup reps.
         reps: number of timed reps the statistics are computed over.
         median_ms: median wall-clock time per call, in milliseconds.
-        p95_ms: 95th percentile wall-clock time, in milliseconds.
-        p99_ms: 99th percentile wall-clock time, in milliseconds.
+        p95_ms: 95th percentile wall-clock time, in milliseconds. Only
+            meaningful at ``reps >= 50``; :func:`benchmark` computes it
+            regardless rather than deciding for the caller.
+        p99_ms: 99th percentile wall-clock time, in milliseconds. Same
+            caveat as ``p95_ms``.
         mean_ms: mean wall-clock time, in milliseconds.
         throughput_per_sec: ``batch_size / (median_ms / 1000)``.
+        per_item_median_ms: ``median_ms / batch_size``. Redundant with
+            ``throughput_per_sec``, but it is the only latency figure
+            directly comparable between benchmarks whose notion of one
+            call differs -- one batched tensor op against one call that
+            loops over the batch -- so it is stored rather than
+            re-derived at each reporting site.
     """
 
     device: str
@@ -42,6 +51,7 @@ class TimingStats:
     p99_ms: float
     mean_ms: float
     throughput_per_sec: float
+    per_item_median_ms: float
 
 
 def _synchronize(device: str) -> None:
@@ -100,4 +110,5 @@ def benchmark(
         p99_ms=torch.quantile(times, 0.99).item(),
         mean_ms=times.mean().item(),
         throughput_per_sec=throughput,
+        per_item_median_ms=median / batch_size,
     )

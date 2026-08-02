@@ -35,6 +35,21 @@ class TestBenchmark(TestCase):
         expected = 4 / (stats.median_ms / 1000.0)
         self.assertAlmostEqual(stats.throughput_per_sec, expected, places=3)
 
+    def test_per_item_median_is_median_over_batch(self):
+        def fn() -> None:
+            time.sleep(0.002)
+
+        stats = benchmark(fn, device="cpu", warmup=1, reps=5, batch_size=4)
+
+        self.assertAlmostEqual(stats.per_item_median_ms, stats.median_ms / 4, places=9)
+        self.assertAlmostEqual(
+            stats.per_item_median_ms, 1000.0 / stats.throughput_per_sec, places=6
+        )
+
+    def test_per_item_median_equals_median_at_batch_one(self):
+        stats = benchmark(lambda: None, device="cpu", warmup=1, reps=3, batch_size=1)
+        self.assertEqual(stats.per_item_median_ms, stats.median_ms)
+
 
 if __name__ == "__main__":
     run_tests()
