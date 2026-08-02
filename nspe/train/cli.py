@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any
 
 import torch
@@ -196,6 +196,8 @@ def _cached_loaders(
             expect_model=args.clip_model,
             expect_pretrained=args.clip_pretrained,
         )
+        if limit is not None:
+            _require_both_classes(dataset.labels.tolist(), split, limit)
         print(f"{split}: {len(dataset)} cached examples")
         loaders.append(
             DataLoader(
@@ -208,6 +210,33 @@ def _cached_loaders(
     return loaders[0], loaders[1]
 
 
+def _require_both_classes(labels: Sequence[float], split: str, limit: int) -> None:
+    """Rejects a truncated split that ended up single-class.
+
+    The Hateful Memes mirror orders its rows by label, so a head-of-split
+    subset is one class only. On the validation split that silently
+    breaks checkpoint *selection*, not just a reported number: AUROC is
+    0.5 for every epoch, so ``--select-metric auroc`` keeps whichever
+    epoch happened to come first.
+
+    Args:
+        labels: labels of the truncated split.
+        split: split name, for the error message.
+        limit: the ``--limit-*`` value that produced the truncation.
+
+    Raises:
+        ValueError: if every label is the same class.
+    """
+    positive = sum(1 for label in labels if label > 0.5)
+    if positive in (0, len(labels)):
+        raise ValueError(
+            f"--limit-{split} {limit} leaves a single class "
+            f"({positive}/{len(labels)} positive): this dataset is ordered "
+            "by label, so a head-of-split subset is degenerate. Use the "
+            "full split."
+        )
+
+
 def _raw_loaders(
     preprocess: object, args: argparse.Namespace
 ) -> tuple[DataLoader, DataLoader]:
@@ -218,7 +247,9 @@ def _raw_loaders(
     for split, limit in (("train", args.limit_train), ("validation", args.limit_val)):
         dataset = HatefulMemesDataset(split=split, transform=preprocess)
         if limit is not None:
-            dataset = Subset(dataset, range(min(limit, len(dataset))))
+            kept = min(limit, len(dataset))
+            _require_both_classes(dataset.labels()[:kept], split, limit)
+            dataset = Subset(dataset, range(kept))
         loaders.append(
             DataLoader(
                 dataset,

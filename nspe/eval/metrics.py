@@ -44,7 +44,11 @@ def auroc(scores: Tensor, labels: Tensor) -> float:
         labels: binary ground truth, shape ``(n,)``.
 
     Returns:
-        AUROC in ``[0, 1]``, or ``0.5`` if either class is absent.
+        AUROC in ``[0, 1]``, or ``0.5`` if either class is absent. That
+        sentinel is indistinguishable from a genuine chance-level
+        result, so callers evaluating a real split should reject a
+        single-class label set before getting here --
+        :func:`~nspe.eval.hateful_memes.compute_h3` does.
     """
     labels = labels.flatten()
     positive = labels > 0.5

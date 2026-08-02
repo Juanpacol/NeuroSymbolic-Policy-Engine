@@ -312,7 +312,10 @@ def main() -> None:
     parser.add_argument("--clip-model", default="ViT-L-14")
     parser.add_argument("--clip-pretrained", default="openai")
     parser.add_argument("--cache-dir", type=str, default=None)
-    parser.add_argument("--split", default="validation", choices=["validation", "test"])
+    # No "test": running a six-configuration sweep against held-out
+    # data is the multiple-comparisons problem the split exists to
+    # avoid, so the choice is unreachable rather than merely discouraged.
+    parser.add_argument("--split", default="validation", choices=["validation"])
     parser.add_argument("--ckpt-dir", type=str, default="checkpoints/ablations")
     parser.add_argument("--out", type=str, default="ablations.json")
     parser.add_argument("--limit-train", type=int, default=None)

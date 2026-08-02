@@ -108,6 +108,68 @@ class TestComputeH3(TestCase):
         self.assertEqual(result["baseline"]["accuracy"], 1.0)
 
 
+class TestPerArmThresholds(TestCase):
+    """A test run must apply each arm the point it fitted on validation.
+
+    The two arms genuinely differ -- seed 0 fitted reasoner 0.0658 and
+    baseline 0.1510 -- so a single shared threshold puts at least one of
+    them at the wrong operating point.
+    """
+
+    def test_pair_applies_a_different_threshold_to_each_arm(self):
+        labels = torch.tensor([1.0, 1.0, 0.0, 0.0])
+        reasoner = torch.tensor([0.9, 0.8, 0.2, 0.1])
+        baseline = torch.tensor([0.09, 0.08, 0.02, 0.01])
+
+        result = compute_h3(reasoner, baseline, labels, threshold=(0.5, 0.05))
+
+        self.assertEqual(result["threshold_source"], "provided_per_arm")
+        self.assertEqual(result["reasoner"]["threshold"], 0.5)
+        self.assertEqual(result["baseline"]["threshold"], 0.05)
+        # Each arm separates its own scale; a shared threshold could not.
+        self.assertEqual(result["reasoner"]["accuracy"], 1.0)
+        self.assertEqual(result["baseline"]["accuracy"], 1.0)
+
+    def test_a_shared_threshold_would_fail_the_same_case(self):
+        labels = torch.tensor([1.0, 1.0, 0.0, 0.0])
+        reasoner = torch.tensor([0.9, 0.8, 0.2, 0.1])
+        baseline = torch.tensor([0.09, 0.08, 0.02, 0.01])
+
+        shared = compute_h3(reasoner, baseline, labels, threshold=0.5)
+
+        self.assertEqual(shared["threshold_source"], "provided")
+        self.assertEqual(shared["baseline"]["accuracy"], 0.5)
+
+    def test_rejects_a_wrong_length_pair(self):
+        labels = torch.tensor([1.0, 0.0])
+        verdict = torch.tensor([0.9, 0.1])
+        with self.assertRaises(ValueError):
+            compute_h3(verdict, verdict, labels, threshold=(0.1, 0.2, 0.3))
+
+
+class TestSingleClassLabelsRefused(TestCase):
+    """Silently answering 0.5 on a degenerate split is the worst case.
+
+    This dataset's rows are ordered by label, so a truncated split is
+    single-class -- and `auroc` returns exactly 0.5 there, which reads
+    as a real chance-level result with an auroc_gap of exactly 0.0.
+    """
+
+    def test_all_negative_labels_raise(self):
+        verdict = torch.rand(8)
+        with self.assertRaisesRegex(ValueError, "single class"):
+            compute_h3(verdict, verdict, torch.zeros(8))
+
+    def test_all_positive_labels_raise(self):
+        verdict = torch.rand(8)
+        with self.assertRaisesRegex(ValueError, "single class"):
+            compute_h3(verdict, verdict, torch.ones(8))
+
+    def test_one_of_each_class_is_enough(self):
+        verdict = torch.tensor([0.9, 0.1])
+        compute_h3(verdict, verdict, torch.tensor([1.0, 0.0]))
+
+
 class TestDegenerateModelsAreNotRewarded(TestCase):
     def test_constant_reasoner_is_flagged_rather_than_winning_h1(self):
         torch.manual_seed(0)

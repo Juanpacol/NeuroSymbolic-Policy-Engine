@@ -69,7 +69,7 @@ def compute_h3(
     reasoner_verdict: Tensor,
     baseline_verdict: Tensor,
     labels: Tensor,
-    threshold: float | None = None,
+    threshold: float | tuple[float, float] | None = None,
 ) -> dict[str, Any]:
     """Computes H3 accuracy/F1/AUROC for the reasoner and baseline.
 
@@ -94,21 +94,50 @@ def compute_h3(
             is only legitimate when they are the validation split --
             fitting and reporting a threshold on the same split inflates
             the result, so a reported test split must be passed a
-            threshold fitted on validation.
+            threshold fitted on validation. A single float applies the
+            same operating point to both arms; a ``(reasoner,
+            baseline)`` pair applies each arm its own, which is what a
+            test run needs since the two fit different points on
+            validation.
 
     Returns:
         A dict with ``reasoner``/``baseline`` metric dicts, the
-        ``threshold`` each used, a ``threshold_source`` of ``"fitted"``
-        or ``"provided"``, and ``accuracy_gap``/``f1_gap``/``auroc_gap``
-        (reasoner minus baseline).
+        ``threshold`` each used, a ``threshold_source`` of ``"fitted"``,
+        ``"provided"`` or ``"provided_per_arm"``, and
+        ``accuracy_gap``/``f1_gap``/``auroc_gap`` (reasoner minus
+        baseline).
+
+    Raises:
+        ValueError: if ``labels`` contains a single class, or if
+            ``threshold`` is a sequence of length other than two.
     """
+    # The Hateful Memes rows are sorted by label, so any truncation of a
+    # split yields one class only -- and `auroc` answers 0.5 for that,
+    # which is indistinguishable from a real chance-level result and
+    # would surface as an auroc_gap of exactly 0.0. Refuse it here,
+    # where both the labels and the intent are in scope.
+    num_positive = int((labels.flatten() > 0.5).sum().item())
+    if num_positive in (0, labels.numel()):
+        raise ValueError(
+            f"labels contain a single class ({num_positive}/{labels.numel()} "
+            "positive); AUROC is undefined and would silently read 0.5"
+        )
+
     if threshold is None:
         source = "fitted"
         reasoner_threshold, _ = best_threshold(reasoner_verdict, labels)
         baseline_threshold, _ = best_threshold(baseline_verdict, labels)
+    elif isinstance(threshold, (tuple, list)):
+        if len(threshold) != 2:
+            raise ValueError(
+                f"per-arm threshold must be (reasoner, baseline), got "
+                f"{len(threshold)} values"
+            )
+        source = "provided_per_arm"
+        reasoner_threshold, baseline_threshold = (float(t) for t in threshold)
     else:
         source = "provided"
-        reasoner_threshold = baseline_threshold = threshold
+        reasoner_threshold = baseline_threshold = float(threshold)
 
     reasoner_metrics = binary_metrics(reasoner_verdict, labels, reasoner_threshold)
     baseline_metrics = binary_metrics(baseline_verdict, labels, baseline_threshold)

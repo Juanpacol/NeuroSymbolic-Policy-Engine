@@ -125,5 +125,25 @@ class TestCacheKey(TestCase):
                 EmbeddingDataset(path, expect_model="ViT-L-14")
 
 
+class TestSingleClassSubsetGuard(TestCase):
+    """The mirror orders rows by label, so a head-of-split subset is
+    single-class -- and on validation that silently breaks checkpoint
+    selection, since AUROC is 0.5 at every epoch.
+    """
+
+    def test_rejects_a_single_class_truncation(self):
+        from nspe.train.cli import _require_both_classes
+
+        with self.assertRaisesRegex(ValueError, "single class"):
+            _require_both_classes([1.0] * 16, "val", 16)
+        with self.assertRaisesRegex(ValueError, "single class"):
+            _require_both_classes([0.0] * 16, "val", 16)
+
+    def test_accepts_a_mixed_truncation(self):
+        from nspe.train.cli import _require_both_classes
+
+        _require_both_classes([1.0] * 8 + [0.0] * 8, "val", 16)
+
+
 if __name__ == "__main__":
     run_tests()

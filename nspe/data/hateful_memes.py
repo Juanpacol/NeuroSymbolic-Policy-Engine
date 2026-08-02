@@ -60,6 +60,18 @@ class HatefulMemesDataset(Dataset[dict[str, Any]]):
         """Number of examples with a resolvable image file."""
         return len(self._hf)
 
+    def labels(self) -> list[int]:
+        """Returns every label, without downloading any image.
+
+        Reads the metadata column directly rather than going through
+        :meth:`__getitem__`, which resolves (and therefore downloads)
+        an image per call. Cheap enough to check a split's class
+        balance before committing to a run -- worth doing, because this
+        mirror's rows are ordered by label, so any head-of-split subset
+        is single-class.
+        """
+        return list(self._hf["label"])
+
     def __getitem__(self, idx: int) -> dict[str, Any]:
         """Downloads (if needed) and returns one example.
 
