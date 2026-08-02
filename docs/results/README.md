@@ -33,9 +33,16 @@ with), `reasoner_product` (the deployed configuration), and `clingo`.
 
 ## H1/H3 — consistency and accuracy (`h1_h3/`)
 
+5 seeds x 2 backbones (ViT-L-14, ViT-B-32-quickgelu) plus the Phase 4
+ablation sweep. See `docs/h1_h3_findings.md` for the numbers these
+back and what they mean; `nspe/ablate/cli.py`'s docstring for the
+ablation matrix.
+
 | file | command | machine |
 |---|---|---|
-| _(pending)_ | | |
+| `h1_h3/results_s{0..4}.json` | `python -m nspe.eval.cli --clip-model ViT-L-14 --cache-dir ./emb_cache --reasoner-checkpoint ... --baseline-checkpoint ... --split validation` (one per seed, checkpoints trained via `nspe.train.cli --seed {0..4}`) | Kaggle T4 |
+| `h1_h3/results_b32_s{0..4}.json` | Same, `--clip-model ViT-B-32-quickgelu` | Kaggle T4 |
+| `h1_h3/ablations.json` | `python -m nspe.ablate.cli --clip-model ViT-L-14 --cache-dir ./emb_cache --device cuda` | Kaggle T4 |
 
 ## Reading these
 

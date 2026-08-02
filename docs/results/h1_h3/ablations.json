@@ -1,0 +1,1008 @@
+{
+  "environment": {
+    "torch_version": "2.10.0+cu128",
+    "python_version": "3.12.13",
+    "platform": "Linux-6.12.90+-x86_64-with-glibc2.35",
+    "device": "cuda",
+    "git_commit": "bb64261"
+  },
+  "policy_name": "hateful_memes_policy",
+  "policy_fingerprint": "5b0331e30842fd43e436b7a5f55369f5b8c2b0be11288fb66677146fdff53379",
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "results": [
+    {
+      "run_id": "anchor_0.0/seed0",
+      "config": {
+        "name": "anchor_0.0",
+        "lambda_anchor": 0.0
+      },
+      "seed": 0,
+      "best_epoch": 5,
+      "reasoner_auroc": 0.7301177942495632,
+      "baseline_auroc": 0.6836256550682215,
+      "auroc_gap": 0.04649213918134176,
+      "reasoner_accuracy": 0.660649836063385,
+      "adjusted_consistency": 0.8427048571281253,
+      "degenerate": false,
+      "num_classes": 54,
+      "signature_entropy": 5.154367446899414,
+      "predicate_stats": {
+        "slur_present": {
+          "mean": 0.5275437235832214,
+          "std": 0.3598003089427948,
+          "activation_rate": 0.5330926775932312,
+          "max_abs_correlation": 0.4855706989765167
+        },
+        "targets_protected_group": {
+          "mean": 0.6505231857299805,
+          "std": 0.409802109003067,
+          "activation_rate": 0.6498194932937622,
+          "max_abs_correlation": 0.24184498190879822
+        },
+        "dehumanizing_comparison": {
+          "mean": 0.5089866518974304,
+          "std": 0.3627242147922516,
+          "activation_rate": 0.5150421261787415,
+          "max_abs_correlation": 0.4855706989765167
+        },
+        "condemnation_context": {
+          "mean": 0.2589181661605835,
+          "std": 0.3630082905292511,
+          "activation_rate": 0.23826715350151062,
+          "max_abs_correlation": 0.14411185681819916
+        },
+        "mocking_tone": {
+          "mean": 0.7246915698051453,
+          "std": 0.33376097679138184,
+          "activation_rate": 0.7448856830596924,
+          "max_abs_correlation": 0.2435252070426941
+        },
+        "benign_context": {
+          "mean": 0.660521388053894,
+          "std": 0.37783366441726685,
+          "activation_rate": 0.6799037456512451,
+          "max_abs_correlation": 0.24184498190879822
+        }
+      }
+    },
+    {
+      "run_id": "anchor_0.0/seed1",
+      "config": {
+        "name": "anchor_0.0",
+        "lambda_anchor": 0.0
+      },
+      "seed": 1,
+      "best_epoch": 3,
+      "reasoner_auroc": 0.7156767857985931,
+      "baseline_auroc": 0.676437609178037,
+      "auroc_gap": 0.03923917662055609,
+      "reasoner_accuracy": 0.6077015399932861,
+      "adjusted_consistency": 0.3987075206157876,
+      "degenerate": false,
+      "num_classes": 36,
+      "signature_entropy": 3.8268849849700928,
+      "predicate_stats": {
+        "slur_present": {
+          "mean": 0.30392545461654663,
+          "std": 0.12293598055839539,
+          "activation_rate": 0.07581227272748947,
+          "max_abs_correlation": 0.3073386251926422
+        },
+        "targets_protected_group": {
+          "mean": 0.7958020567893982,
+          "std": 0.24592143297195435,
+          "activation_rate": 0.8628158569335938,
+          "max_abs_correlation": 0.21434558928012848
+        },
+        "dehumanizing_comparison": {
+          "mean": 0.3115905821323395,
+          "std": 0.1535893827676773,
+          "activation_rate": 0.11913357675075531,
+          "max_abs_correlation": 0.4416634738445282
+        },
+        "condemnation_context": {
+          "mean": 0.4784402549266815,
+          "std": 0.3647465407848358,
+          "activation_rate": 0.47894102334976196,
+          "max_abs_correlation": 0.4416634738445282
+        },
+        "mocking_tone": {
+          "mean": 0.6848331689834595,
+          "std": 0.3470473885536194,
+          "activation_rate": 0.7003610134124756,
+          "max_abs_correlation": 0.40310022234916687
+        },
+        "benign_context": {
+          "mean": 0.7554153800010681,
+          "std": 0.32040268182754517,
+          "activation_rate": 0.7954272031784058,
+          "max_abs_correlation": 0.40310022234916687
+        }
+      }
+    },
+    {
+      "run_id": "anchor_0.0/seed2",
+      "config": {
+        "name": "anchor_0.0",
+        "lambda_anchor": 0.0
+      },
+      "seed": 2,
+      "best_epoch": 4,
+      "reasoner_auroc": 0.7121358764930834,
+      "baseline_auroc": 0.685254473348756,
+      "auroc_gap": 0.02688140314432741,
+      "reasoner_accuracy": 0.6257520914077759,
+      "adjusted_consistency": 0.7426884390885187,
+      "degenerate": false,
+      "num_classes": 41,
+      "signature_entropy": 4.686016082763672,
+      "predicate_stats": {
+        "slur_present": {
+          "mean": 0.7195534706115723,
+          "std": 0.28737136721611023,
+          "activation_rate": 0.7593261003494263,
+          "max_abs_correlation": 0.2320653349161148
+        },
+        "targets_protected_group": {
+          "mean": 0.9347745180130005,
+          "std": 0.1571219265460968,
+          "activation_rate": 0.9675090312957764,
+          "max_abs_correlation": 0.2215198278427124
+        },
+        "dehumanizing_comparison": {
+          "mean": 0.4981701076030731,
+          "std": 0.2542000114917755,
+          "activation_rate": 0.48495787382125854,
+          "max_abs_correlation": 0.2642807066440582
+        },
+        "condemnation_context": {
+          "mean": 0.46290892362594604,
+          "std": 0.40388229489326477,
+          "activation_rate": 0.47412756085395813,
+          "max_abs_correlation": 0.2642807066440582
+        },
+        "mocking_tone": {
+          "mean": 0.5149521231651306,
+          "std": 0.3757266402244568,
+          "activation_rate": 0.5090252757072449,
+          "max_abs_correlation": 0.5006183981895447
+        },
+        "benign_context": {
+          "mean": 0.5519454479217529,
+          "std": 0.39515221118927,
+          "activation_rate": 0.5643802881240845,
+          "max_abs_correlation": 0.5006183981895447
+        }
+      }
+    },
+    {
+      "run_id": "anchor_0.03/seed0",
+      "config": {
+        "name": "anchor_0.03",
+        "lambda_anchor": 0.03
+      },
+      "seed": 0,
+      "best_epoch": 14,
+      "reasoner_auroc": 0.7277217789528351,
+      "baseline_auroc": 0.6836256550682215,
+      "auroc_gap": 0.04409612388461359,
+      "reasoner_accuracy": 0.6534296274185181,
+      "adjusted_consistency": 0.8279157618257431,
+      "degenerate": false,
+      "num_classes": 55,
+      "signature_entropy": 5.159905433654785,
+      "predicate_stats": {
+        "slur_present": {
+          "mean": 0.6849870085716248,
+          "std": 0.4186633229255676,
+          "activation_rate": 0.6919374465942383,
+          "max_abs_correlation": 0.4496801197528839
+        },
+        "targets_protected_group": {
+          "mean": 0.6500858068466187,
+          "std": 0.44064122438430786,
+          "activation_rate": 0.6522262096405029,
+          "max_abs_correlation": 0.21762320399284363
+        },
+        "dehumanizing_comparison": {
+          "mean": 0.675390362739563,
+          "std": 0.4169475734233856,
+          "activation_rate": 0.6823104619979858,
+          "max_abs_correlation": 0.4496801197528839
+        },
+        "condemnation_context": {
+          "mean": 0.22387218475341797,
+          "std": 0.3868807256221771,
+          "activation_rate": 0.2190132439136505,
+          "max_abs_correlation": 0.2986375689506531
+        },
+        "mocking_tone": {
+          "mean": 0.41076308488845825,
+          "std": 0.4312312602996826,
+          "activation_rate": 0.4079422354698181,
+          "max_abs_correlation": 0.21762320399284363
+        },
+        "benign_context": {
+          "mean": 0.4576255977153778,
+          "std": 0.4541667401790619,
+          "activation_rate": 0.4632972180843353,
+          "max_abs_correlation": 0.2986375689506531
+        }
+      }
+    },
+    {
+      "run_id": "anchor_0.03/seed1",
+      "config": {
+        "name": "anchor_0.03",
+        "lambda_anchor": 0.03
+      },
+      "seed": 1,
+      "best_epoch": 3,
+      "reasoner_auroc": 0.7206281573107974,
+      "baseline_auroc": 0.676437609178037,
+      "auroc_gap": 0.044190548132760465,
+      "reasoner_accuracy": 0.6305655837059021,
+      "adjusted_consistency": 0.4769800376521842,
+      "degenerate": false,
+      "num_classes": 35,
+      "signature_entropy": 3.9160146713256836,
+      "predicate_stats": {
+        "slur_present": {
+          "mean": 0.2868342101573944,
+          "std": 0.10875419527292252,
+          "activation_rate": 0.03971119225025177,
+          "max_abs_correlation": 0.26803430914878845
+        },
+        "targets_protected_group": {
+          "mean": 0.7304655909538269,
+          "std": 0.2990352511405945,
+          "activation_rate": 0.7677497267723083,
+          "max_abs_correlation": 0.36923545598983765
+        },
+        "dehumanizing_comparison": {
+          "mean": 0.2853740155696869,
+          "std": 0.13543701171875,
+          "activation_rate": 0.09145607799291611,
+          "max_abs_correlation": 0.4839250445365906
+        },
+        "condemnation_context": {
+          "mean": 0.45921286940574646,
+          "std": 0.36260801553726196,
+          "activation_rate": 0.44043320417404175,
+          "max_abs_correlation": 0.4839250445365906
+        },
+        "mocking_tone": {
+          "mean": 0.6872206330299377,
+          "std": 0.3460237681865692,
+          "activation_rate": 0.7039711475372314,
+          "max_abs_correlation": 0.5004332065582275
+        },
+        "benign_context": {
+          "mean": 0.6328175067901611,
+          "std": 0.3570946156978607,
+          "activation_rate": 0.6702767610549927,
+          "max_abs_correlation": 0.5004332065582275
+        }
+      }
+    },
+    {
+      "run_id": "anchor_0.03/seed2",
+      "config": {
+        "name": "anchor_0.03",
+        "lambda_anchor": 0.03
+      },
+      "seed": 2,
+      "best_epoch": 5,
+      "reasoner_auroc": 0.7101057551579245,
+      "baseline_auroc": 0.685254473348756,
+      "auroc_gap": 0.024851281809168513,
+      "reasoner_accuracy": 0.5583634376525879,
+      "adjusted_consistency": 0.8206037270978994,
+      "degenerate": false,
+      "num_classes": 50,
+      "signature_entropy": 4.77510929107666,
+      "predicate_stats": {
+        "slur_present": {
+          "mean": 0.6714298129081726,
+          "std": 0.34095004200935364,
+          "activation_rate": 0.7075812220573425,
+          "max_abs_correlation": 0.33731767535209656
+        },
+        "targets_protected_group": {
+          "mean": 0.8547568321228027,
+          "std": 0.24996425211429596,
+          "activation_rate": 0.8844765424728394,
+          "max_abs_correlation": 0.3305760324001312
+        },
+        "dehumanizing_comparison": {
+          "mean": 0.42792806029319763,
+          "std": 0.3022434115409851,
+          "activation_rate": 0.3995186388492584,
+          "max_abs_correlation": 0.33731767535209656
+        },
+        "condemnation_context": {
+          "mean": 0.3551771342754364,
+          "std": 0.39816221594810486,
+          "activation_rate": 0.35138386487960815,
+          "max_abs_correlation": 0.2878064215183258
+        },
+        "mocking_tone": {
+          "mean": 0.6522043943405151,
+          "std": 0.3723953664302826,
+          "activation_rate": 0.6847172379493713,
+          "max_abs_correlation": 0.31474342942237854
+        },
+        "benign_context": {
+          "mean": 0.6860561370849609,
+          "std": 0.3720419108867645,
+          "activation_rate": 0.7039711475372314,
+          "max_abs_correlation": 0.31474342942237854
+        }
+      }
+    },
+    {
+      "run_id": "anchor_0.1/seed0",
+      "config": {
+        "name": "anchor_0.1",
+        "lambda_anchor": 0.1
+      },
+      "seed": 0,
+      "best_epoch": 3,
+      "reasoner_auroc": 0.7199730890892782,
+      "baseline_auroc": 0.6836256550682215,
+      "auroc_gap": 0.03634743402105667,
+      "reasoner_accuracy": 0.5764139294624329,
+      "adjusted_consistency": 0.6743543351801953,
+      "degenerate": false,
+      "num_classes": 57,
+      "signature_entropy": 5.243922710418701,
+      "predicate_stats": {
+        "slur_present": {
+          "mean": 0.5625936388969421,
+          "std": 0.2838107943534851,
+          "activation_rate": 0.6089049577713013,
+          "max_abs_correlation": 0.3203200101852417
+        },
+        "targets_protected_group": {
+          "mean": 0.5566409230232239,
+          "std": 0.3882150650024414,
+          "activation_rate": 0.5475330948829651,
+          "max_abs_correlation": 0.28583577275276184
+        },
+        "dehumanizing_comparison": {
+          "mean": 0.5280341506004333,
+          "std": 0.20604366064071655,
+          "activation_rate": 0.5571600198745728,
+          "max_abs_correlation": 0.3203200101852417
+        },
+        "condemnation_context": {
+          "mean": 0.2206985354423523,
+          "std": 0.27730539441108704,
+          "activation_rate": 0.15523464977741241,
+          "max_abs_correlation": 0.4430409371852875
+        },
+        "mocking_tone": {
+          "mean": 0.6017425060272217,
+          "std": 0.310596227645874,
+          "activation_rate": 0.634175717830658,
+          "max_abs_correlation": 0.28583577275276184
+        },
+        "benign_context": {
+          "mean": 0.5295092463493347,
+          "std": 0.3353324234485626,
+          "activation_rate": 0.5415162444114685,
+          "max_abs_correlation": 0.4430409371852875
+        }
+      }
+    },
+    {
+      "run_id": "anchor_0.1/seed1",
+      "config": {
+        "name": "anchor_0.1",
+        "lambda_anchor": 0.1
+      },
+      "seed": 1,
+      "best_epoch": 3,
+      "reasoner_auroc": 0.720421604267976,
+      "baseline_auroc": 0.676437609178037,
+      "auroc_gap": 0.043983995089939,
+      "reasoner_accuracy": 0.6197352409362793,
+      "adjusted_consistency": 0.4600228798629795,
+      "degenerate": false,
+      "num_classes": 52,
+      "signature_entropy": 4.697072505950928,
+      "predicate_stats": {
+        "slur_present": {
+          "mean": 0.37184372544288635,
+          "std": 0.11984473466873169,
+          "activation_rate": 0.144404336810112,
+          "max_abs_correlation": 0.19444330036640167
+        },
+        "targets_protected_group": {
+          "mean": 0.7245428562164307,
+          "std": 0.324798583984375,
+          "activation_rate": 0.7484958171844482,
+          "max_abs_correlation": 0.518428385257721
+        },
+        "dehumanizing_comparison": {
+          "mean": 0.3989609181880951,
+          "std": 0.15461988747119904,
+          "activation_rate": 0.2611311674118042,
+          "max_abs_correlation": 0.38349828124046326
+        },
+        "condemnation_context": {
+          "mean": 0.45086485147476196,
+          "std": 0.3477727770805359,
+          "activation_rate": 0.42599278688430786,
+          "max_abs_correlation": 0.38349828124046326
+        },
+        "mocking_tone": {
+          "mean": 0.6169953346252441,
+          "std": 0.35140740871429443,
+          "activation_rate": 0.6329723000526428,
+          "max_abs_correlation": 0.518428385257721
+        },
+        "benign_context": {
+          "mean": 0.6898474097251892,
+          "std": 0.3357781767845154,
+          "activation_rate": 0.720818281173706,
+          "max_abs_correlation": 0.38622063398361206
+        }
+      }
+    },
+    {
+      "run_id": "anchor_0.1/seed2",
+      "config": {
+        "name": "anchor_0.1",
+        "lambda_anchor": 0.1
+      },
+      "seed": 2,
+      "best_epoch": 6,
+      "reasoner_auroc": 0.7137883008356546,
+      "baseline_auroc": 0.685254473348756,
+      "auroc_gap": 0.02853382748689859,
+      "reasoner_accuracy": 0.6077015399932861,
+      "adjusted_consistency": 0.8041306373120216,
+      "degenerate": false,
+      "num_classes": 58,
+      "signature_entropy": 5.037911415100098,
+      "predicate_stats": {
+        "slur_present": {
+          "mean": 0.7088448405265808,
+          "std": 0.3330349326133728,
+          "activation_rate": 0.7328519821166992,
+          "max_abs_correlation": 0.4620297849178314
+        },
+        "targets_protected_group": {
+          "mean": 0.7814666628837585,
+          "std": 0.33390480279922485,
+          "activation_rate": 0.8038507699966431,
+          "max_abs_correlation": 0.24261298775672913
+        },
+        "dehumanizing_comparison": {
+          "mean": 0.6288657188415527,
+          "std": 0.3200451135635376,
+          "activation_rate": 0.6425992846488953,
+          "max_abs_correlation": 0.4620297849178314
+        },
+        "condemnation_context": {
+          "mean": 0.33282580971717834,
+          "std": 0.4040495753288269,
+          "activation_rate": 0.3273164927959442,
+          "max_abs_correlation": 0.28572189807891846
+        },
+        "mocking_tone": {
+          "mean": 0.35376468300819397,
+          "std": 0.3898421823978424,
+          "activation_rate": 0.33814680576324463,
+          "max_abs_correlation": 0.1305875927209854
+        },
+        "benign_context": {
+          "mean": 0.5589905381202698,
+          "std": 0.42326024174690247,
+          "activation_rate": 0.5535499453544617,
+          "max_abs_correlation": 0.16794835031032562
+        }
+      }
+    },
+    {
+      "run_id": "anchor_0.3/seed0",
+      "config": {
+        "name": "anchor_0.3",
+        "lambda_anchor": 0.3
+      },
+      "seed": 0,
+      "best_epoch": 5,
+      "reasoner_auroc": 0.71822624049856,
+      "baseline_auroc": 0.6836256550682215,
+      "auroc_gap": 0.034600585430338504,
+      "reasoner_accuracy": 0.6329723000526428,
+      "adjusted_consistency": 0.6727679921063543,
+      "degenerate": false,
+      "num_classes": 52,
+      "signature_entropy": 5.240947246551514,
+      "predicate_stats": {
+        "slur_present": {
+          "mean": 0.4618223309516907,
+          "std": 0.3123703896999359,
+          "activation_rate": 0.4645006060600281,
+          "max_abs_correlation": 0.3951803147792816
+        },
+        "targets_protected_group": {
+          "mean": 0.6251395344734192,
+          "std": 0.41599658131599426,
+          "activation_rate": 0.6245487332344055,
+          "max_abs_correlation": 0.19611646234989166
+        },
+        "dehumanizing_comparison": {
+          "mean": 0.5479589104652405,
+          "std": 0.24223555624485016,
+          "activation_rate": 0.5716004967689514,
+          "max_abs_correlation": 0.3951803147792816
+        },
+        "condemnation_context": {
+          "mean": 0.2178421914577484,
+          "std": 0.3219340145587921,
+          "activation_rate": 0.18291215598583221,
+          "max_abs_correlation": 0.24123036861419678
+        },
+        "mocking_tone": {
+          "mean": 0.5988943576812744,
+          "std": 0.29437899589538574,
+          "activation_rate": 0.6582430601119995,
+          "max_abs_correlation": 0.23437684774398804
+        },
+        "benign_context": {
+          "mean": 0.46913373470306396,
+          "std": 0.38871604204177856,
+          "activation_rate": 0.46570396423339844,
+          "max_abs_correlation": 0.24123036861419678
+        }
+      }
+    },
+    {
+      "run_id": "anchor_0.3/seed1",
+      "config": {
+        "name": "anchor_0.3",
+        "lambda_anchor": 0.3
+      },
+      "seed": 1,
+      "best_epoch": 3,
+      "reasoner_auroc": 0.7194419526934517,
+      "baseline_auroc": 0.676437609178037,
+      "auroc_gap": 0.04300434351541471,
+      "reasoner_accuracy": 0.637785792350769,
+      "adjusted_consistency": 0.502696169395873,
+      "degenerate": false,
+      "num_classes": 62,
+      "signature_entropy": 5.4002156257629395,
+      "predicate_stats": {
+        "slur_present": {
+          "mean": 0.5159044861793518,
+          "std": 0.1606355756521225,
+          "activation_rate": 0.5439229607582092,
+          "max_abs_correlation": 0.37350308895111084
+        },
+        "targets_protected_group": {
+          "mean": 0.681025505065918,
+          "std": 0.35793209075927734,
+          "activation_rate": 0.7075812220573425,
+          "max_abs_correlation": 0.36804336309432983
+        },
+        "dehumanizing_comparison": {
+          "mean": 0.507058322429657,
+          "std": 0.18300098180770874,
+          "activation_rate": 0.5114319920539856,
+          "max_abs_correlation": 0.37012624740600586
+        },
+        "condemnation_context": {
+          "mean": 0.45172053575515747,
+          "std": 0.34051722288131714,
+          "activation_rate": 0.4392298460006714,
+          "max_abs_correlation": 0.37350308895111084
+        },
+        "mocking_tone": {
+          "mean": 0.5148328542709351,
+          "std": 0.3167160153388977,
+          "activation_rate": 0.5090252757072449,
+          "max_abs_correlation": 0.36804336309432983
+        },
+        "benign_context": {
+          "mean": 0.6443201899528503,
+          "std": 0.33037641644477844,
+          "activation_rate": 0.6823104619979858,
+          "max_abs_correlation": 0.30848264694213867
+        }
+      }
+    },
+    {
+      "run_id": "anchor_0.3/seed2",
+      "config": {
+        "name": "anchor_0.3",
+        "lambda_anchor": 0.3
+      },
+      "seed": 2,
+      "best_epoch": 4,
+      "reasoner_auroc": 0.7095746187620982,
+      "baseline_auroc": 0.685254473348756,
+      "auroc_gap": 0.024320145413342154,
+      "reasoner_accuracy": 0.6438026428222656,
+      "adjusted_consistency": 0.6951001374548729,
+      "degenerate": false,
+      "num_classes": 59,
+      "signature_entropy": 5.405418395996094,
+      "predicate_stats": {
+        "slur_present": {
+          "mean": 0.5716808438301086,
+          "std": 0.21861520409584045,
+          "activation_rate": 0.6245487332344055,
+          "max_abs_correlation": 0.5070593357086182
+        },
+        "targets_protected_group": {
+          "mean": 0.572607159614563,
+          "std": 0.3942420780658722,
+          "activation_rate": 0.570397138595581,
+          "max_abs_correlation": 0.19401070475578308
+        },
+        "dehumanizing_comparison": {
+          "mean": 0.6020742058753967,
+          "std": 0.25507959723472595,
+          "activation_rate": 0.645006000995636,
+          "max_abs_correlation": 0.5070593357086182
+        },
+        "condemnation_context": {
+          "mean": 0.33464688062667847,
+          "std": 0.3771493434906006,
+          "activation_rate": 0.32370638847351074,
+          "max_abs_correlation": 0.17929138243198395
+        },
+        "mocking_tone": {
+          "mean": 0.5597761273384094,
+          "std": 0.3857741951942444,
+          "activation_rate": 0.577617347240448,
+          "max_abs_correlation": 0.3636310398578644
+        },
+        "benign_context": {
+          "mean": 0.526393711566925,
+          "std": 0.3930911123752594,
+          "activation_rate": 0.5234656929969788,
+          "max_abs_correlation": 0.3636310398578644
+        }
+      }
+    },
+    {
+      "run_id": "learnable_confidence/seed0",
+      "config": {
+        "name": "learnable_confidence",
+        "learnable_confidence": true
+      },
+      "seed": 0,
+      "best_epoch": 3,
+      "reasoner_auroc": 0.7203212785043199,
+      "baseline_auroc": 0.6836256550682215,
+      "auroc_gap": 0.036695623436098446,
+      "reasoner_accuracy": 0.5655836462974548,
+      "adjusted_consistency": 0.7158338390640151,
+      "degenerate": false,
+      "num_classes": 57,
+      "signature_entropy": 5.314430236816406,
+      "predicate_stats": {
+        "slur_present": {
+          "mean": 0.5627496242523193,
+          "std": 0.27808719873428345,
+          "activation_rate": 0.6064981818199158,
+          "max_abs_correlation": 0.30140843987464905
+        },
+        "targets_protected_group": {
+          "mean": 0.5469650626182556,
+          "std": 0.38778841495513916,
+          "activation_rate": 0.5391095280647278,
+          "max_abs_correlation": 0.2723264992237091
+        },
+        "dehumanizing_comparison": {
+          "mean": 0.5185093879699707,
+          "std": 0.1968611478805542,
+          "activation_rate": 0.5379061102867126,
+          "max_abs_correlation": 0.30140843987464905
+        },
+        "condemnation_context": {
+          "mean": 0.24299608170986176,
+          "std": 0.28107115626335144,
+          "activation_rate": 0.1805054098367691,
+          "max_abs_correlation": 0.4355536997318268
+        },
+        "mocking_tone": {
+          "mean": 0.5929942727088928,
+          "std": 0.31038331985473633,
+          "activation_rate": 0.6329723000526428,
+          "max_abs_correlation": 0.2723264992237091
+        },
+        "benign_context": {
+          "mean": 0.559493362903595,
+          "std": 0.325518399477005,
+          "activation_rate": 0.5716004967689514,
+          "max_abs_correlation": 0.4355536997318268
+        }
+      }
+    },
+    {
+      "run_id": "learnable_confidence/seed1",
+      "config": {
+        "name": "learnable_confidence",
+        "learnable_confidence": true
+      },
+      "seed": 1,
+      "best_epoch": 3,
+      "reasoner_auroc": 0.7202504603182097,
+      "baseline_auroc": 0.676437609178037,
+      "auroc_gap": 0.04381285114017275,
+      "reasoner_accuracy": 0.6185318827629089,
+      "adjusted_consistency": 0.4612536839016148,
+      "degenerate": false,
+      "num_classes": 50,
+      "signature_entropy": 4.626677989959717,
+      "predicate_stats": {
+        "slur_present": {
+          "mean": 0.3700479567050934,
+          "std": 0.11757567524909973,
+          "activation_rate": 0.13477738201618195,
+          "max_abs_correlation": 0.19311603903770447
+        },
+        "targets_protected_group": {
+          "mean": 0.7236582040786743,
+          "std": 0.3247675597667694,
+          "activation_rate": 0.7472923994064331,
+          "max_abs_correlation": 0.5153101086616516
+        },
+        "dehumanizing_comparison": {
+          "mean": 0.3871649205684662,
+          "std": 0.15410926938056946,
+          "activation_rate": 0.2334536761045456,
+          "max_abs_correlation": 0.38807448744773865
+        },
+        "condemnation_context": {
+          "mean": 0.4513300061225891,
+          "std": 0.3464055061340332,
+          "activation_rate": 0.42599278688430786,
+          "max_abs_correlation": 0.38807448744773865
+        },
+        "mocking_tone": {
+          "mean": 0.6166648268699646,
+          "std": 0.3518044948577881,
+          "activation_rate": 0.6329723000526428,
+          "max_abs_correlation": 0.5153101086616516
+        },
+        "benign_context": {
+          "mean": 0.6976608633995056,
+          "std": 0.3319953680038452,
+          "activation_rate": 0.7316486239433289,
+          "max_abs_correlation": 0.38728392124176025
+        }
+      }
+    },
+    {
+      "run_id": "learnable_confidence/seed2",
+      "config": {
+        "name": "learnable_confidence",
+        "learnable_confidence": true
+      },
+      "seed": 2,
+      "best_epoch": 5,
+      "reasoner_auroc": 0.7153226948680421,
+      "baseline_auroc": 0.685254473348756,
+      "auroc_gap": 0.03006822151928612,
+      "reasoner_accuracy": 0.6125150322914124,
+      "adjusted_consistency": 0.5085073225518635,
+      "degenerate": false,
+      "num_classes": 49,
+      "signature_entropy": 4.6992034912109375,
+      "predicate_stats": {
+        "slur_present": {
+          "mean": 0.741506040096283,
+          "std": 0.26046648621559143,
+          "activation_rate": 0.8038507699966431,
+          "max_abs_correlation": 0.3555923104286194
+        },
+        "targets_protected_group": {
+          "mean": 0.8128158450126648,
+          "std": 0.28664660453796387,
+          "activation_rate": 0.8363417387008667,
+          "max_abs_correlation": 0.3010611832141876
+        },
+        "dehumanizing_comparison": {
+          "mean": 0.5470044612884521,
+          "std": 0.2698616087436676,
+          "activation_rate": 0.5679903626441956,
+          "max_abs_correlation": 0.3555923104286194
+        },
+        "condemnation_context": {
+          "mean": 0.29156985878944397,
+          "std": 0.3634793758392334,
+          "activation_rate": 0.28158843517303467,
+          "max_abs_correlation": 0.22139889001846313
+        },
+        "mocking_tone": {
+          "mean": 0.4297599792480469,
+          "std": 0.37071818113327026,
+          "activation_rate": 0.41756919026374817,
+          "max_abs_correlation": 0.10196041315793991
+        },
+        "benign_context": {
+          "mean": 0.7759879231452942,
+          "std": 0.32539814710617065,
+          "activation_rate": 0.7966305613517761,
+          "max_abs_correlation": 0.13251760601997375
+        }
+      }
+    },
+    {
+      "run_id": "pmean/seed0",
+      "config": {
+        "name": "pmean",
+        "aggregate": "pmean"
+      },
+      "seed": 0,
+      "best_epoch": 7,
+      "reasoner_auroc": 0.725974930362117,
+      "baseline_auroc": 0.6836256550682215,
+      "auroc_gap": 0.04234927529389554,
+      "reasoner_accuracy": 0.6389891505241394,
+      "adjusted_consistency": 0.85579927942456,
+      "degenerate": false,
+      "num_classes": 46,
+      "signature_entropy": 4.59655237197876,
+      "predicate_stats": {
+        "slur_present": {
+          "mean": 0.6649200916290283,
+          "std": 0.344440221786499,
+          "activation_rate": 0.6895306706428528,
+          "max_abs_correlation": 0.47440779209136963
+        },
+        "targets_protected_group": {
+          "mean": 0.6673734784126282,
+          "std": 0.41044074296951294,
+          "activation_rate": 0.6738868951797485,
+          "max_abs_correlation": 0.1968773901462555
+        },
+        "dehumanizing_comparison": {
+          "mean": 0.7385492324829102,
+          "std": 0.28889650106430054,
+          "activation_rate": 0.7858002185821533,
+          "max_abs_correlation": 0.47440779209136963
+        },
+        "condemnation_context": {
+          "mean": 0.20519199967384338,
+          "std": 0.33911994099617004,
+          "activation_rate": 0.1913357377052307,
+          "max_abs_correlation": 0.1481432169675827
+        },
+        "mocking_tone": {
+          "mean": 0.8160569071769714,
+          "std": 0.33441591262817383,
+          "activation_rate": 0.826714813709259,
+          "max_abs_correlation": 0.4326237440109253
+        },
+        "benign_context": {
+          "mean": 0.521533191204071,
+          "std": 0.4391365349292755,
+          "activation_rate": 0.5186522006988525,
+          "max_abs_correlation": 0.4326237440109253
+        }
+      }
+    },
+    {
+      "run_id": "pmean/seed1",
+      "config": {
+        "name": "pmean",
+        "aggregate": "pmean"
+      },
+      "seed": 1,
+      "best_epoch": 2,
+      "reasoner_auroc": 0.7057858458052028,
+      "baseline_auroc": 0.676437609178037,
+      "auroc_gap": 0.02934823662716579,
+      "reasoner_accuracy": 0.6101083159446716,
+      "adjusted_consistency": 0.44887588487433394,
+      "degenerate": false,
+      "num_classes": 43,
+      "signature_entropy": 4.76499605178833,
+      "predicate_stats": {
+        "slur_present": {
+          "mean": 0.5338353514671326,
+          "std": 0.15535868704319,
+          "activation_rate": 0.6004813313484192,
+          "max_abs_correlation": 0.23288989067077637
+        },
+        "targets_protected_group": {
+          "mean": 0.7484911680221558,
+          "std": 0.3253529965877533,
+          "activation_rate": 0.7797833681106567,
+          "max_abs_correlation": 0.4652494192123413
+        },
+        "dehumanizing_comparison": {
+          "mean": 0.5856553316116333,
+          "std": 0.14614984393119812,
+          "activation_rate": 0.7099879384040833,
+          "max_abs_correlation": 0.15092550218105316
+        },
+        "condemnation_context": {
+          "mean": 0.5640591382980347,
+          "std": 0.32888489961624146,
+          "activation_rate": 0.5679903626441956,
+          "max_abs_correlation": 0.47662878036499023
+        },
+        "mocking_tone": {
+          "mean": 0.729823887348175,
+          "std": 0.28735122084617615,
+          "activation_rate": 0.7725631594657898,
+          "max_abs_correlation": 0.4652494192123413
+        },
+        "benign_context": {
+          "mean": 0.7237014174461365,
+          "std": 0.27026477456092834,
+          "activation_rate": 0.8014440536499023,
+          "max_abs_correlation": 0.47662878036499023
+        }
+      }
+    },
+    {
+      "run_id": "pmean/seed2",
+      "config": {
+        "name": "pmean",
+        "aggregate": "pmean"
+      },
+      "seed": 2,
+      "best_epoch": 5,
+      "reasoner_auroc": 0.7210707709739861,
+      "baseline_auroc": 0.685254473348756,
+      "auroc_gap": 0.03581629762523009,
+      "reasoner_accuracy": 0.6064981818199158,
+      "adjusted_consistency": 0.9334013211386224,
+      "degenerate": false,
+      "num_classes": 51,
+      "signature_entropy": 4.841284275054932,
+      "predicate_stats": {
+        "slur_present": {
+          "mean": 0.6360903382301331,
+          "std": 0.35365763306617737,
+          "activation_rate": 0.6582430601119995,
+          "max_abs_correlation": 0.5408124923706055
+        },
+        "targets_protected_group": {
+          "mean": 0.7990441918373108,
+          "std": 0.3271780014038086,
+          "activation_rate": 0.8134777545928955,
+          "max_abs_correlation": 0.1849880963563919
+        },
+        "dehumanizing_comparison": {
+          "mean": 0.7272543907165527,
+          "std": 0.30627530813217163,
+          "activation_rate": 0.7797833681106567,
+          "max_abs_correlation": 0.5408124923706055
+        },
+        "condemnation_context": {
+          "mean": 0.2971835434436798,
+          "std": 0.386665403842926,
+          "activation_rate": 0.3008423447608948,
+          "max_abs_correlation": 0.31848445534706116
+        },
+        "mocking_tone": {
+          "mean": 0.54814213514328,
+          "std": 0.4033423960208893,
+          "activation_rate": 0.5595667958259583,
+          "max_abs_correlation": 0.2879614531993866
+        },
+        "benign_context": {
+          "mean": 0.5829768180847168,
+          "std": 0.42563149333000183,
+          "activation_rate": 0.5848375558853149,
+          "max_abs_correlation": 0.31848445534706116
+        }
+      }
+    }
+  ]
+}
