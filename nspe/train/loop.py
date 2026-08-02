@@ -12,6 +12,13 @@ attains a respectable cross-entropy while carrying no information, so
 selecting on BCE actively rewards the degenerate solution this pipeline
 was previously falling into. AUROC is invariant to monotone rescaling
 and only measures the ranking the model learned.
+
+Checkpoints exclude the frozen CLIP backbone. Both arms hold CLIP as a
+registered submodule, so an unfiltered ``state_dict`` is over 99.9%
+frozen weights that are already reproducible from the ``open_clip``
+pretrained tag -- roughly 1.7GB per checkpoint against 1.7MB of trained
+parameters, which exhausts a free-tier disk quota within a couple of
+dozen runs.
 """
 
 from __future__ import annotations
@@ -28,6 +35,72 @@ from nspe.eval.metrics import binary_metrics
 from nspe.train.seed import set_seed
 
 _MAXIMIZE = {"auroc", "f1", "accuracy"}
+_BACKBONE_ATTR = "clip"
+
+
+def frozen_backbone_keys(model: nn.Module) -> set[str]:
+    """Returns the state-dict keys owned by frozen CLIP submodules.
+
+    Derived from the module tree rather than by matching key strings: a
+    ``k.startswith("clip.")`` test would also swallow any future
+    parameter that merely happens to be named that way, and the keys it
+    must *not* touch -- ``extractor.head.zero_shot_weight`` above all,
+    which the evaluation path relies on the checkpoint to carry -- are
+    only distinguishable by which module owns them.
+
+    Args:
+        model: the module whose backbone keys to identify.
+
+    Returns:
+        The set of ``model.state_dict()`` keys belonging to a submodule
+        named ``clip``, at any depth.
+    """
+    keys: set[str] = set()
+    for name, module in model.named_modules():
+        if name.rsplit(".", 1)[-1] == _BACKBONE_ATTR:
+            keys.update(f"{name}.{key}" for key in module.state_dict())
+    return keys
+
+
+def trainable_state_dict(model: nn.Module) -> dict[str, Tensor]:
+    """Returns ``model.state_dict()`` without the frozen CLIP backbone.
+
+    Args:
+        model: the module to serialize.
+
+    Returns:
+        A state dict carrying every trained tensor and no backbone
+        weights.
+    """
+    excluded = frozen_backbone_keys(model)
+    return {k: v for k, v in model.state_dict().items() if k not in excluded}
+
+
+def load_trainable_state_dict(model: nn.Module, state: dict[str, Tensor]) -> None:
+    """Loads a checkpoint that may omit the frozen CLIP backbone.
+
+    ``strict=False`` alone would also mask a genuinely truncated
+    checkpoint, so every missing key is checked against the backbone key
+    set and anything else is an error. Backbone weights are rebuilt from
+    the ``open_clip`` pretrained tag during construction, so omitting
+    them leaves the backbone correct rather than randomly initialized.
+    Checkpoints written before filtering existed still load.
+
+    Args:
+        model: the module to load into, already constructed.
+        state: a state dict from :func:`trainable_state_dict` or a full
+            ``model.state_dict()``.
+
+    Raises:
+        RuntimeError: if the checkpoint carries unexpected keys, or is
+            missing a key that is not part of the frozen backbone.
+    """
+    missing, unexpected = model.load_state_dict(state, strict=False)
+    if unexpected:
+        raise RuntimeError(f"checkpoint has unexpected keys: {sorted(unexpected)[:10]}")
+    absent = sorted(set(missing) - frozen_backbone_keys(model))
+    if absent:
+        raise RuntimeError(f"checkpoint is missing trained keys: {absent[:10]}")
 
 
 def _weighted_bce(verdict: Tensor, labels: Tensor, pos_weight: float | None) -> Tensor:
@@ -158,7 +231,9 @@ def train_model(
     if seed is not None:
         set_seed(seed)
     if resume_from is not None:
-        model.load_state_dict(torch.load(resume_from, weights_only=True))
+        load_trainable_state_dict(
+            model, torch.load(resume_from, weights_only=True)
+        )
 
     model = model.to(device)
     params = [p for p in model.parameters() if p.requires_grad]
@@ -208,7 +283,7 @@ def train_model(
             if checkpoint_path is not None:
                 path = Path(checkpoint_path)
                 path.parent.mkdir(parents=True, exist_ok=True)
-                torch.save(model.state_dict(), path)
+                torch.save(trainable_state_dict(model), path)
         elif patience is not None and epoch - best_epoch >= patience:
             break
 

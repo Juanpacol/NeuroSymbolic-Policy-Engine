@@ -13,7 +13,11 @@ import torch
 from torch import nn
 from torch.testing._internal.common_utils import TestCase, run_tests
 
-from nspe.train.loop import train_model
+from nspe.train.loop import (
+    load_trainable_state_dict,
+    train_model,
+    trainable_state_dict,
+)
 from nspe.train.seed import set_seed
 
 
@@ -28,6 +32,25 @@ class _ToyModel(nn.Module):
         del texts
         features = images.mean(dim=(1, 2, 3), keepdim=True)
         return torch.sigmoid(self.linear(features)).flatten()
+
+
+class _ToyModelWithBackbone(_ToyModel):
+    """Toy model shaped like the real arms around checkpointing.
+
+    Carries a frozen submodule named ``clip`` plus a sibling buffer
+    named ``zero_shot_weight``. The sibling is the point: it is not part
+    of the backbone but sits next to one, so it pins that the filter
+    keys off module ownership rather than off the key string.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.clip = nn.Linear(2, 2)
+        for param in self.clip.parameters():
+            param.requires_grad = False
+        self.clip.register_buffer("running_scale", torch.ones(2))
+        self.head = nn.Module()
+        self.head.register_buffer("zero_shot_weight", torch.arange(3.0))
 
 
 def _toy_batches(n_batches: int, batch_size: int, seed: int):
@@ -196,6 +219,77 @@ class TestTrainModel(TestCase):
 
             self.assertEqual(result["train_losses"], [])
             self.assertEqual(resumed.linear.weight, saved["linear.weight"])
+
+    def test_checkpoint_excludes_frozen_backbone(self):
+        model = _ToyModelWithBackbone()
+        batches = list(_toy_batches(n_batches=2, batch_size=8, seed=0))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            checkpoint_path = Path(tmp) / "model.pt"
+            train_model(
+                model,
+                forward_fn=_forward,
+                train_loader=batches,
+                val_loader=batches,
+                epochs=1,
+                patience=None,
+                scheduler=None,
+                device="cpu",
+                checkpoint_path=checkpoint_path,
+            )
+            state = torch.load(checkpoint_path, weights_only=True)
+
+        self.assertEqual([k for k in state if k.startswith("clip.")], [])
+        self.assertIn("linear.weight", state)
+        # Not backbone-owned, and the eval path needs it from the file.
+        self.assertIn("head.zero_shot_weight", state)
+
+    def test_resume_from_filtered_checkpoint(self):
+        trained = _ToyModelWithBackbone()
+        with torch.no_grad():
+            trained.linear.weight.fill_(3.0)
+            trained.clip.weight.fill_(9.0)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            checkpoint_path = Path(tmp) / "model.pt"
+            torch.save(trainable_state_dict(trained), checkpoint_path)
+
+            resumed = _ToyModelWithBackbone()
+            fresh_backbone = resumed.clip.weight.detach().clone()
+            train_model(
+                resumed,
+                forward_fn=_forward,
+                train_loader=[],
+                val_loader=[],
+                epochs=0,
+                device="cpu",
+                resume_from=checkpoint_path,
+            )
+
+        self.assertEqual(resumed.linear.weight, trained.linear.weight)
+        # Backbone stays at its freshly constructed (pretrained) values,
+        # not zeroed and not the saved model's.
+        self.assertEqual(resumed.clip.weight, fresh_backbone)
+
+    def test_load_rejects_a_missing_trained_key(self):
+        model = _ToyModelWithBackbone()
+        state = trainable_state_dict(model)
+        del state["linear.weight"]
+
+        with self.assertRaises(RuntimeError):
+            load_trainable_state_dict(model, state)
+
+    def test_load_rejects_unexpected_keys(self):
+        model = _ToyModelWithBackbone()
+        state = trainable_state_dict(model)
+        state["not_a_real_parameter"] = torch.zeros(1)
+
+        with self.assertRaises(RuntimeError):
+            load_trainable_state_dict(model, state)
+
+    def test_load_accepts_a_legacy_full_checkpoint(self):
+        model = _ToyModelWithBackbone()
+        load_trainable_state_dict(model, model.state_dict())
 
     def test_rejects_unknown_select_metric(self):
         with self.assertRaises(ValueError):

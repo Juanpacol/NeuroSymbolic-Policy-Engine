@@ -41,6 +41,7 @@ from nspe.train.cache import (
     precompute_embeddings,
 )
 from nspe.train.dataset import collate_hateful_memes
+from nspe.train.loop import load_trainable_state_dict
 
 _VERDICT_NAME = "hateful"
 
@@ -127,7 +128,9 @@ def run_eval(
     # what training saved.
     engine = PolicyEngine(extractor, reasoner, calibrator=VerdictCalibrator())
     engine = engine.to(device)
-    engine.load_state_dict(torch.load(reasoner_checkpoint, weights_only=True))
+    load_trainable_state_dict(
+        engine, torch.load(reasoner_checkpoint, weights_only=True)
+    )
     engine.eval()
 
     baseline = NeuralBaselineClassifier(
@@ -137,7 +140,9 @@ def run_eval(
         hidden_dim=hidden_dim,
         calibrator=VerdictCalibrator(),
     ).to(device)
-    baseline.load_state_dict(torch.load(baseline_checkpoint, weights_only=True))
+    load_trainable_state_dict(
+        baseline, torch.load(baseline_checkpoint, weights_only=True)
+    )
     baseline.eval()
 
     if cache_dir is not None:
