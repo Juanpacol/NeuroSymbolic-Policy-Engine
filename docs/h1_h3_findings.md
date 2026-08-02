@@ -1,9 +1,9 @@
 # H1/H3 remediation: root causes, fixes, and first real results
 
-Snapshot as of commit `b0eb9bf`. Read this before touching
-`nspe/train/`, `nspe/eval/`, `nspe/consistency.py`, or
-`nspe/extractor.py` -- it explains *why* those modules look the way
-they do, which their docstrings only partially cover.
+Snapshot as of commit `bb64261`. Read this before touching
+`nspe/train/`, `nspe/eval/`, `nspe/consistency.py`, `nspe/extractor.py`,
+or `nspe/ablate/` -- it explains *why* those modules look the way they
+do, which their docstrings only partially cover.
 
 ## The problem this fixed
 
@@ -81,6 +81,24 @@ policy:
   per-model threshold on the given split instead of hardcoding 0.5.
 - **`b0eb9bf`** -- `p_mean_segment` wired as an opt-in
   `--aggregate pmean` ablation (default stays the t-conorm).
+- **`842d20f`** -- checkpoints stop serializing the frozen CLIP
+  backbone (`nspe/train/loop.py::trainable_state_dict`/
+  `load_trainable_state_dict`), ~1.7GB -> ~1MB per checkpoint.
+- **`9ecc60d`** -- `nspe/eval/cli.py::run_eval` gained
+  `learnable_confidence`/`aggregate`/`pmean_p` parameters. Previously
+  hardcoded to the defaults, so a `--aggregate pmean` checkpoint was
+  silently evaluated under `"tconorm"` -- that ablation measured
+  nothing until this fix.
+- **`3a9f821`** -- `nspe/train/cli.py` split into `build_parser`/
+  `train_one`, so the ablation sweep can render configurations as
+  argument lists instead of hand-building a `Namespace`.
+- **`430510b`** -- `nspe/ablate/cli.py`: the Phase 4 sweep runner, one
+  baseline checkpoint reused per seed across all six configurations,
+  resumable via a `run_id`-keyed results file.
+- **`bb64261`** -- fixed a CPU/GPU device mismatch in
+  `VerdictCalibrator.fit_bias_to_base_rate`, surfaced by the sweep on
+  `--device cuda` (the warm-start pass accumulates verdicts on CPU
+  while the calibrator lives on GPU).
 
 ## Real-data validation (5 seeds, two backbones, validation split)
 
@@ -146,24 +164,73 @@ number; AUROC is threshold-free and doesn't have this problem.
   reasoner run: 0.89 → 2.06 from epoch 4 to epoch 9); early stopping on
   AUROC is cutting at the right point, but if `--patience` is loosened
   this will need weight decay retuning.
-- **Checkpoint disk usage.** Each checkpoint now includes the full
-  frozen-CLIP state dict (~1.7GB at ViT-L-14). Running 5 seeds × 2
-  models at both backbones in one Kaggle session exhausted
-  `/kaggle/working`'s disk quota mid-run (`RuntimeError: [enforce fail
-  at inline_container.cc:668]` from `torch.save`); delete `.pt` files
-  for checkpoints already evaluated (their `results_*.json` is what
-  matters) before starting the next backbone/seed batch. Worth fixing
-  properly later by not serializing frozen CLIP weights into every
-  checkpoint.
+- **Checkpoint disk usage -- resolved in `842d20f`.** Checkpoints
+  originally included the full frozen-CLIP state dict (~1.7GB at
+  ViT-L-14), which exhausted a Kaggle session's disk quota mid-run
+  during the 5-seed backbone comparison. `nspe/train/loop.py` now
+  filters CLIP out on save (`trainable_state_dict`) and reconstructs it
+  from the pretrained tag on load (`load_trainable_state_dict`);
+  checkpoints dropped to ~1MB. This is what made the Phase 4 sweep
+  (21 runs) practical in one session.
 
-## What's still open (remediation plan phases not yet run)
+## Phase 4 ablations (3 seeds, ViT-L-14, validation split)
 
-- **Phase 4 ablations not yet run**: `--learnable-confidence`,
-  `--aggregate pmean`, `--lambda-anchor` sweep at `{0, 0.03, 0.1, 0.3}`
-  (currently defaults to `0.1`, never varied). The backbone comparison
-  (ViT-L-14 vs. ViT-B-32) above is done.
-- **A controlled test of the backbone-dependence hypothesis** for H1,
-  if it's worth pursuing further than the observational finding above.
+Ran via `nspe/ablate/cli.py` (see `docs/colab_h1_h3.md`, Cell 8) on
+Kaggle T4, commit `bb64261`. 18 reasoner runs + 3 shared baseline runs,
+full output in `ablations.json` (not checked in).
+
+| config | AUROC | adjusted_consistency | num_classes |
+|---|---|---|---|
+| anchor_0.0 | 0.7193 ± 0.0078 | 0.6614 ± 0.1902 | 43.7 ± 7.6 |
+| anchor_0.03 | 0.7195 ± 0.0072 | 0.7085 ± 0.1637 | 46.7 ± 8.5 |
+| anchor_0.1 (default) | 0.7181 ± 0.0030 | 0.6462 ± 0.1419 | 55.7 ± 2.6 |
+| anchor_0.3 | 0.7157 ± 0.0044 | 0.6235 ± 0.0859 | 57.7 ± 4.2 |
+| learnable_confidence | 0.7186 ± 0.0023 | 0.5619 ± 0.1106 | 52.0 ± 3.6 |
+| pmean | 0.7176 ± 0.0086 | 0.7460 ± 0.2125 | 46.7 ± 3.3 |
+
+Baseline AUROC across the shared 3 seeds: 0.673-0.685 (not shown per
+row; every config's gap is positive, [+0.024, +0.047]).
+
+**AUROC is robust to every ablation.** 0.716-0.720 across all six
+configurations, gap always positive against the shared baseline. None
+of these design choices -- dropping the anchor loss, learning rule
+confidences instead of using the policy's declared ones, switching
+aggregation to p-mean -- moves the headline H3 number. This is the
+result to lead with: the AUROC advantage is structural, not contingent
+on a specific regularizer weight or aggregation choice.
+
+**`num_classes` increases monotonically with `lambda_anchor`**: 43.7 ->
+46.7 -> 55.7 -> 57.7 across {0, 0.03, 0.1, 0.3}. Std also drops sharply
+after 0.03 (7.6-8.5 -> 2.6-4.2). This directly validates the anchor
+loss's mechanism from Phase 1: supervision from the policy's own
+predicate descriptions measurably increases predicate diversity, and
+more of it makes the outcome more consistent across seeds, not just
+higher on average.
+
+**`adjusted_consistency` is not resolved at 3 seeds.** Per-config means
+range 0.56-0.75, but stds (0.09-0.21) are large relative to the spread
+between configs -- e.g. `pmean`'s three seeds are `[0.449, 0.856,
+0.933]`. None of these differences should be read as "config X beats
+config Y" without more seeds. The one directional note worth a sentence
+in the paper: `learnable_confidence` has both the lowest mean (0.562)
+and the tightest spread (0.111) of the six, mildly suggesting that
+learning rule confidences trades away some consistency for stability --
+but this is a lead, not a finding.
+
+**Do not read `anchor_0.1`'s numbers here as a rerun of the main
+5-seed result above.** Same configuration, different seeds (0-2 here
+vs. 0-4 there) and a smaller n, so the two AUROC figures (0.7181 here,
+0.7193 in the 5-seed table) agreeing closely is a mild positive check,
+not independent confirmation.
+
+## What's still open
+
+- **A controlled test of the backbone-dependence hypothesis** for H1
+  (ViT-L-14 vs. ViT-B-32 findings above), if it's worth pursuing further
+  than the observational finding already recorded.
+- **More seeds on `adjusted_consistency` per ablation config**, if the
+  anchor-loss trend on that metric specifically (not just `num_classes`)
+  is worth nailing down for the paper.
 - **Test split.** Explicitly gated in the plan until validation is
   stable across seeds -- now that it is (5 seeds, two backbones), this
   is unblocked, but pass `--threshold` fitted on validation rather than
