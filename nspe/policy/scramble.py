@@ -78,25 +78,28 @@ def _remap(
     )
 
 
-def scramble_policy(policy: Policy, seed: int) -> tuple[Policy, dict[str, str]]:
-    """Rewires a policy's rules to read the wrong base predicates.
+def apply_permutation(
+    policy: Policy, mapping: dict[str, str], name: str | None = None
+) -> Policy:
+    """Rewires a policy's rules to read permuted base predicates.
 
-    Predicate declarations are left exactly as they are -- each name
-    keeps its own description, so
+    Only ``body`` and ``unless`` literals move. Predicate declarations
+    are deliberately left alone, for two reasons: each name keeps its own
+    description, so
     :meth:`~nspe.extractor.NeuroSymbolicLayer.init_heads_from_descriptions`
-    still grounds every head to the same semantics it would have had.
-    Only which rule reads which predicate changes, which is precisely
-    the thing under test.
+    still grounds every head to the same semantics; and the declaration
+    order is what fixes ``mu0``'s column order, so permuting it too would
+    cancel against the rewiring and leave the policy unchanged.
 
     Args:
-        policy: the intact policy.
-        seed: seed for the derangement.
+        policy: the policy to rewire.
+        mapping: base predicate name to the name that replaces it.
+            Names absent from the mapping are left as they are.
+        name: name for the result, or ``None`` to keep the original's.
 
     Returns:
-        A tuple of the scrambled policy, whose ``name`` gains a
-        ``_scrambled_s{seed}`` suffix, and the permutation applied.
+        The rewired policy.
     """
-    mapping = base_derangement(policy.predicate_names("base"), seed)
     rules = tuple(
         Rule(
             id=rule.id,
@@ -108,8 +111,23 @@ def scramble_policy(policy: Policy, seed: int) -> tuple[Policy, dict[str, str]]:
         )
         for rule in policy.rules
     )
-    scrambled = replace(policy, name=f"{policy.name}_scrambled_s{seed}", rules=rules)
-    return scrambled, mapping
+    return replace(policy, name=name or policy.name, rules=rules)
+
+
+def scramble_policy(policy: Policy, seed: int) -> tuple[Policy, dict[str, str]]:
+    """Rewires a policy's rules to read the wrong base predicates.
+
+    Args:
+        policy: the intact policy.
+        seed: seed for the derangement.
+
+    Returns:
+        A tuple of the scrambled policy, whose ``name`` gains a
+        ``_scrambled_s{seed}`` suffix, and the permutation applied.
+    """
+    mapping = base_derangement(policy.predicate_names("base"), seed)
+    name = f"{policy.name}_scrambled_s{seed}"
+    return apply_permutation(policy, mapping, name), mapping
 
 
 def _header(

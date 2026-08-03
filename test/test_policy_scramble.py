@@ -16,7 +16,11 @@ from torch.testing._internal.common_utils import TestCase, run_tests
 from nspe.policy.compiler import compile_policy
 from nspe.policy.loader import dump_policy, load_policy, policy_to_dict
 from nspe.policy.schema import Literal, Policy, Predicate, Rule
-from nspe.policy.scramble import base_derangement, scramble_policy
+from nspe.policy.scramble import (
+    apply_permutation,
+    base_derangement,
+    scramble_policy,
+)
 
 _POLICY = "nspe/policies/hateful_memes.yaml"
 _SEEDS = range(50)
@@ -151,6 +155,50 @@ class TestStructureIsPreserved(TestCase):
         # what keeps control runs out of the intact result's mean.
         scrambled, _ = scramble_policy(self.policy, 7)
         self.assertEqual(scrambled.name, "hateful_memes_policy_scrambled_s7")
+
+
+class TestApplyPermutation(TestCase):
+    """The rewiring primitive the sweep and the scramble control share."""
+
+    def setUp(self):
+        self.policy = load_policy(_POLICY)
+        self.names = self.policy.predicate_names("base")
+
+    def test_identity_mapping_is_a_no_op(self):
+        identity = dict(zip(self.names, self.names, strict=True))
+        self.assertEqual(apply_permutation(self.policy, identity), self.policy)
+
+    def test_declarations_are_never_touched(self):
+        """Permuting them too would silently cancel the rewiring.
+
+        Declaration order fixes mu0's column order, so moving the
+        declarations as well would leave the compiled policy equivalent
+        to the intact one -- turning the whole control into a no-op --
+        and would carry each description onto the wrong predicate.
+        """
+        mapping = base_derangement(self.names, 0)
+        rewired = apply_permutation(self.policy, mapping)
+
+        self.assertEqual(rewired.predicates, self.policy.predicates)
+        self.assertEqual(rewired.predicate_names("base"), self.names)
+        self.assertNotEqual(rewired.rules, self.policy.rules)
+
+    def test_name_defaults_to_the_originals(self):
+        mapping = base_derangement(self.names, 0)
+        self.assertEqual(apply_permutation(self.policy, mapping).name, self.policy.name)
+        self.assertEqual(
+            apply_permutation(self.policy, mapping, "custom").name, "custom"
+        )
+
+    def test_partial_mapping_leaves_unnamed_predicates_alone(self):
+        pair = {self.names[0]: self.names[1], self.names[1]: self.names[0]}
+        rewired = apply_permutation(self.policy, pair)
+
+        moved = {self.names[0], self.names[1]}
+        for before, after in zip(self.policy.rules, rewired.rules, strict=True):
+            for lit_before, lit_after in zip(before.body, after.body, strict=True):
+                if lit_before.predicate not in moved:
+                    self.assertEqual(lit_after.predicate, lit_before.predicate)
 
 
 class TestYamlRoundTrip(TestCase):
