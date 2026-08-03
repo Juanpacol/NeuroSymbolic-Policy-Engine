@@ -127,7 +127,7 @@ def compute_h3(
         source = "fitted"
         reasoner_threshold, _ = best_threshold(reasoner_verdict, labels)
         baseline_threshold, _ = best_threshold(baseline_verdict, labels)
-    elif isinstance(threshold, (tuple, list)):
+    elif isinstance(threshold, tuple | list):
         if len(threshold) != 2:
             raise ValueError(
                 f"per-arm threshold must be (reasoner, baseline), got "
