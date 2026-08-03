@@ -336,7 +336,92 @@ per seed:
   with each other and the label, or too few (six), for a random
   derangement to land on a genuinely uninformative wiring.
 
-### Cell 12 — download checkpoints and results
+### Cell 12 — dump mu0 for the exhaustive wiring sweep
+
+The scrambled-policy control tested **one** random derangement. With six
+base predicates there are only 720 wirings in total, so the whole null
+distribution is enumerable — and once the trained predicate degrees are
+on disk, sweeping all of them is a CPU job of a few seconds that needs
+no GPU and no checkpoint (`nspe/eval/wiring_sweep.py`).
+
+This cell produces that input: train the intact reasoner and baseline
+per seed, then evaluate validation once with `--dump-mu0`. It is Cell
+9's training half plus one flag, so the `results_val_s*.json` it
+regenerates should reproduce the committed numbers — a free consistency
+check on the whole pipeline.
+
+```python
+for seed in range(10):
+    !{sys.executable} -m nspe.train.cli --model reasoner \
+      --clip-model ViT-L-14 --clip-pretrained openai \
+      --cache-dir /kaggle/working/emb_cache --seed {seed} --epochs 30 \
+      --out /kaggle/working/checkpoints/reasoner_s{seed}.pt
+
+    !{sys.executable} -m nspe.train.cli --model baseline \
+      --clip-model ViT-L-14 --clip-pretrained openai \
+      --cache-dir /kaggle/working/emb_cache --seed {seed} --epochs 30 \
+      --out /kaggle/working/checkpoints/baseline_s{seed}.pt
+
+    !{sys.executable} -m nspe.eval.cli \
+      --clip-model ViT-L-14 --cache-dir /kaggle/working/emb_cache \
+      --reasoner-checkpoint /kaggle/working/checkpoints/reasoner_s{seed}.pt \
+      --baseline-checkpoint /kaggle/working/checkpoints/baseline_s{seed}.pt \
+      --split validation --device cuda \
+      --dump-mu0 /kaggle/working/mu0_val_s{seed}.json \
+      --out /kaggle/working/results_val_s{seed}.json
+```
+
+Each dump is ~50KB (831 x 6 degrees plus labels, rounded to 6 decimals)
+and carries the `predicate_names` and `policy_fingerprint` that make its
+columns interpretable; the sweep refuses a dump whose either field
+disagrees with the policy it is handed.
+
+The sweep itself runs locally afterwards, not here:
+
+```
+python -m nspe.eval.wiring_sweep \
+  --mu0 docs/results/h1_h3/mu0_val_s0.json ... \
+  --out docs/results/h1_h3/wiring_sweep_val.json
+```
+
+### Cell 13 — the ablation sweep's missing config, and more seeds
+
+`linear_probe` (`hidden_dim: 0`) is in `nspe/ablate/cli.py` but has
+never been run, so `ablations.json` holds six configs where the code
+defines seven. It is now the most load-bearing one: H3's restated claim
+is that a fixed nonlinear aggregator beats a learned linear one **at
+matched capacity**, and this is the ablation that removes the nonlinear
+trunk from *both* arms to test exactly that.
+
+```python
+!{sys.executable} -m nspe.ablate.cli \
+  --clip-model ViT-L-14 --clip-pretrained openai \
+  --cache-dir /kaggle/working/emb_cache --device cuda \
+  --configs linear_probe --seeds 0 1 2 \
+  --ckpt-dir /kaggle/working/checkpoints/ablations \
+  --out /kaggle/working/ablations.json
+```
+
+Then, if the session still has time, widen every config to ten seeds so
+`adjusted_consistency` is resolved rather than suggestive:
+
+```python
+!{sys.executable} -m nspe.ablate.cli \
+  --clip-model ViT-L-14 --clip-pretrained openai \
+  --cache-dir /kaggle/working/emb_cache --device cuda \
+  --seeds 0 1 2 3 4 5 6 7 8 9 \
+  --ckpt-dir /kaggle/working/checkpoints/ablations \
+  --out /kaggle/working/ablations.json
+```
+
+**Run this last.** It is the largest and least load-bearing block here,
+and it is fully resumable — the runs already in `ablations.json` are
+skipped, so a session that dies mid-sweep costs at most one run and the
+next session picks up where it stopped. Copy the committed
+`docs/results/h1_h3/ablations.json` in first if you want to extend it
+rather than start over.
+
+### Cell 14 — download checkpoints and results
 
 ```python
 import shutil
@@ -344,6 +429,25 @@ shutil.make_archive("/kaggle/working/checkpoints", "zip", "/kaggle/working/check
 shutil.make_archive("/kaggle/working/results", "zip", "/kaggle/working", base_dir=".")
 ```
 Then download via the notebook's Output tab (Kaggle) or `files.download(...)` (Colab).
+
+Or, to collect just the JSON (much smaller, and what the analysis
+actually needs):
+
+```python
+import shutil, glob, os
+
+os.makedirs("/kaggle/working/all_results", exist_ok=True)
+for pattern in ("results_*.json", "mu0_*.json", "ablations.json"):
+    for f in glob.glob(f"/kaggle/working/{pattern}"):
+        shutil.copy(f, "/kaggle/working/all_results/")
+
+files = sorted(os.listdir("/kaggle/working/all_results"))
+print(f"{len(files)} files collected:")
+for f in files:
+    print(" ", f)
+
+shutil.make_archive("/kaggle/working/all_results", "zip", "/kaggle/working/all_results")
+```
 
 ## Notes
 

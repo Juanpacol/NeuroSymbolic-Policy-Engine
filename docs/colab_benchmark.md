@@ -99,7 +99,58 @@ One cell each, so a disconnect costs at most one sweep. Capped at batch
   --out bench_results/h2_cuda_synthetic_b100_r1000.json
 ```
 
-### Cell 6 — download the results
+### Cell 6 — locating the CPU/GPU crossover
+
+`docs/h2_findings.md` brackets the crossover between batch 64 and 1024
+but does not locate it, which matters because a real deployment's batch
+size may fall in that range. This narrows it to a factor of two. Both
+devices, same policy, same rep budget — the pair is the comparison.
+
+```python
+!python -m nspe.bench.cli --device cuda \
+  --batch-sizes 64 128 256 512 --warmup 20 --reps 200 --clingo-budget-s 30 \
+  --out bench_results/h2_cuda_meta_crossover.json
+```
+
+```python
+!python -m nspe.bench.cli --device cpu \
+  --batch-sizes 64 128 256 512 --warmup 20 --reps 200 --clingo-budget-s 30 \
+  --out bench_results/h2_cpu_meta_crossover.json
+```
+
+### Cell 7 — locating the rule-base-scaling inflection
+
+The advantage is flat at `b50_r200` and no longer flat at `b100_r1000`,
+so the bend sits between them. One policy in between locates it, and
+filling in the batch sizes `b100_r1000` never ran (it did only 1, 64,
+1024) shows whether the bend is smooth or a knee.
+
+```python
+!python -m nspe.bench.cli --device cuda --synthetic 70 500 \
+  --batch-sizes 1 64 1024 --warmup 20 --reps 200 --clingo-budget-s 30 \
+  --out bench_results/h2_cuda_synthetic_b70_r500.json
+```
+
+```python
+!python -m nspe.bench.cli --device cuda --synthetic 100 1000 \
+  --batch-sizes 8 128 256 512 --warmup 20 --reps 200 --clingo-budget-s 30 \
+  --out bench_results/h2_cuda_synthetic_b100_r1000_fill.json
+```
+
+### Cell 8 — does the crossover move with policy size?
+
+Only CUDA was ever run on the synthetic policies, so whether a larger
+rule base shifts the CPU/GPU crossover is untested. `b100_r1000`'s
+reasoner latency is no longer launch-overhead-bound at large batch, so
+its crossover may well sit elsewhere than the meta policy's.
+
+```python
+!python -m nspe.bench.cli --device cpu --synthetic 100 1000 \
+  --batch-sizes 1 64 256 1024 --warmup 20 --reps 200 --clingo-budget-s 30 \
+  --out bench_results/h2_cpu_synthetic_b100_r1000.json
+```
+
+### Cell 9 — download the results
 
 ```python
 from google.colab import files
