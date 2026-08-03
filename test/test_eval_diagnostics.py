@@ -45,6 +45,44 @@ class TestPredicateStats(TestCase):
         self.assertEqual(set(stats), set(_NAMES))
 
 
+class TestLabelCorrelation(TestCase):
+    """Predicates can be distinct from each other yet equally informative.
+
+    That is the case `max_abs_correlation` alone cannot distinguish, and
+    the one that would explain why rewiring the policy costs nothing.
+    """
+
+    def test_absent_unless_labels_are_given(self):
+        stats = predicate_stats(torch.rand(32, 3), _NAMES)
+        self.assertNotIn("label_correlation", stats["slur"])
+
+    def test_perfectly_predictive_predicate_scores_one(self):
+        labels = (torch.arange(64) % 2).float()
+        mu0 = torch.stack([labels, 1.0 - labels, torch.rand(64)], dim=1)
+        stats = predicate_stats(mu0, _NAMES, labels=labels)
+
+        self.assertAlmostEqual(stats["slur"]["label_correlation"], 1.0, places=5)
+        self.assertAlmostEqual(stats["target"]["label_correlation"], -1.0, places=5)
+
+    def test_independent_predicate_scores_near_zero(self):
+        torch.manual_seed(0)
+        labels = (torch.rand(4096) > 0.5).float()
+        stats = predicate_stats(torch.rand(4096, 3), _NAMES, labels=labels)
+        for name in _NAMES:
+            self.assertLess(abs(stats[name]["label_correlation"]), 0.1)
+
+    def test_a_constant_label_yields_zero_not_nan(self):
+        labels = torch.ones(32)
+        stats = predicate_stats(torch.rand(32, 3), _NAMES, labels=labels)
+        for name in _NAMES:
+            value = stats[name]["label_correlation"]
+            self.assertFalse(value != value, f"{name} is NaN")
+
+    def test_single_row_is_safe(self):
+        stats = predicate_stats(torch.rand(1, 3), _NAMES, labels=torch.ones(1))
+        self.assertNotIn("label_correlation", stats["slur"])
+
+
 class TestSignatureDistribution(TestCase):
     def test_counts_and_ordering(self):
         mu0 = torch.tensor(

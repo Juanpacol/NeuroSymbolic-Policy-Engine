@@ -192,7 +192,12 @@ def load_mu0_dump(path: str | Path, policy: Policy) -> tuple[Tensor, Tensor]:
             f"{dump['policy_fingerprint'][:12]}... but this policy compiles to "
             f"{fingerprint[:12]}..."
         )
-    return torch.tensor(dump["mu0"]), torch.tensor(dump["labels"])
+    # float32 both, matching what the eval path produces: labels are
+    # written as ints for compactness but consumed as truth degrees.
+    return (
+        torch.tensor(dump["mu0"], dtype=torch.float32),
+        torch.tensor(dump["labels"], dtype=torch.float32),
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:

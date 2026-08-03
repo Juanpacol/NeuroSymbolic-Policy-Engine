@@ -38,6 +38,7 @@ from nspe.eval.hateful_memes import (
 )
 from nspe.extractor import NeuroSymbolicLayer
 from nspe.policy.loader import load_policy
+from nspe.policy.schema import Policy
 from nspe.reasoner import PolicyKGReasoner
 from nspe.train.cache import (
     EmbeddingDataset,
@@ -97,6 +98,51 @@ def _environment_metadata(device: str) -> dict[str, Any]:
     }
 
 
+_MU0_DECIMALS = 6
+
+
+def _write_mu0_dump(
+    path: str,
+    mu0: torch.Tensor,
+    labels: torch.Tensor,
+    policy: Policy,
+    predicate_names: tuple[str, ...],
+    device: str,
+) -> None:
+    """Writes base predicate degrees for policy-varying analyses.
+
+    ``predicate_names`` and ``policy_fingerprint`` are what make the
+    columns interpretable and the dump attributable; without them a
+    consumer cannot tell a column reordering from a real difference.
+    :func:`nspe.eval.wiring_sweep.load_mu0_dump` refuses a dump whose
+    either field disagrees with the policy it was handed.
+
+    Args:
+        path: destination JSON file.
+        mu0: base predicate truth degrees, shape ``(n, P)``.
+        labels: binary ground truth, shape ``(n,)``.
+        policy: the policy the reasoner ran.
+        predicate_names: base predicate names, in column order.
+        device: the device the run used, recorded for provenance.
+    """
+    out_path = Path(path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(
+        json.dumps(
+            {
+                "schema": 1,
+                "policy_name": policy.name,
+                "policy_fingerprint": PolicyKGReasoner(policy).rule_tensor.fingerprint,
+                "predicate_names": list(predicate_names),
+                "environment": _environment_metadata(device),
+                "mu0": [[round(v, _MU0_DECIMALS) for v in row] for row in mu0.tolist()],
+                "labels": [int(v) for v in labels.tolist()],
+            }
+        )
+    )
+    print(f"wrote mu0 dump -> {out_path}")
+
+
 @torch.no_grad()
 def run_eval(
     policy_path: str,
@@ -113,6 +159,7 @@ def run_eval(
     learnable_confidence: bool = False,
     aggregate: str = "tconorm",
     pmean_p: float = 2.0,
+    dump_mu0: str | None = None,
 ) -> dict[str, Any]:
     """Runs the reasoner and baseline over one split and computes H1/H3.
 
@@ -145,6 +192,10 @@ def run_eval(
             aggregation it never saw.
         pmean_p: power for ``aggregate="pmean"``, likewise not carried
             in the state dict.
+        dump_mu0: if given, a path to write the raw base predicate
+            degrees and labels to, for analyses that vary the policy
+            over a fixed predicate layer -- see
+            :mod:`nspe.eval.wiring_sweep`.
 
     Returns:
         A dict with ``dataset``, ``h1_consistency``, and
@@ -272,10 +323,13 @@ def run_eval(
     )
 
     predicate_names = policy.predicate_names("base")
-    h1["predicate_stats"] = predicate_stats(mu0, predicate_names)
+    h1["predicate_stats"] = predicate_stats(mu0, predicate_names, labels=labels)
     h1["signature_distribution"] = signature_distribution(
         mu0, predicate_names, top_k=10
     )
+
+    if dump_mu0 is not None:
+        _write_mu0_dump(dump_mu0, mu0, labels, policy, predicate_names, device)
 
     reasoner_pred = reasoner_verdict >= h3["reasoner"]["threshold"]
     baseline_pred = baseline_verdict >= h3["baseline"]["threshold"]
@@ -510,6 +564,12 @@ def main() -> None:
     )
     parser.add_argument("--baseline-threshold", type=float, default=None)
     parser.add_argument("--out", type=str, default=None)
+    parser.add_argument(
+        "--dump-mu0",
+        type=str,
+        default=None,
+        help="write base predicate degrees and labels here, for nspe.eval.wiring_sweep",
+    )
     args = parser.parse_args()
 
     thresholds = resolve_thresholds(args)
@@ -529,6 +589,7 @@ def main() -> None:
         learnable_confidence=args.learnable_confidence,
         aggregate=args.aggregate,
         pmean_p=args.pmean_p,
+        dump_mu0=args.dump_mu0,
     )
     _print_markdown(eval_result)
 

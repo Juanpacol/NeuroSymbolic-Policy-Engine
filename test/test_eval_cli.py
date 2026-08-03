@@ -109,6 +109,64 @@ class TestResolveThresholds(TestCase):
             resolve_thresholds(_args(baseline_threshold=0.2))
 
 
+class TestMu0Dump(TestCase):
+    """The dump the eval CLI writes must be one the sweep can read.
+
+    These two are the only producer and consumer of that format, so the
+    round trip is what keeps them from drifting apart silently.
+    """
+
+    def test_written_dump_loads_back_through_the_sweep(self):
+        import torch
+
+        from nspe.eval.cli import _write_mu0_dump
+        from nspe.eval.wiring_sweep import load_mu0_dump
+        from nspe.policy.loader import load_policy
+
+        policy = load_policy(_POLICY)
+        names = policy.predicate_names("base")
+        mu0 = torch.rand(8, len(names))
+        labels = (torch.arange(8) % 2).float()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = str(Path(tmp) / "mu0.json")
+            _write_mu0_dump(path, mu0, labels, policy, names, "cpu")
+            loaded_mu0, loaded_labels = load_mu0_dump(path, policy)
+            payload = json.loads(Path(path).read_text())
+
+        self.assertEqual(tuple(loaded_mu0.shape), (8, len(names)))
+        torch.testing.assert_close(loaded_labels, labels)
+        # Rounded for size, so compare at the recorded precision.
+        torch.testing.assert_close(loaded_mu0, mu0, atol=1e-6, rtol=0)
+        self.assertEqual(payload["predicate_names"], list(names))
+
+    def test_a_reordered_policy_is_rejected_by_the_consumer(self):
+        import torch
+
+        from nspe.eval.cli import _write_mu0_dump
+        from nspe.eval.wiring_sweep import load_mu0_dump
+        from nspe.policy.loader import load_policy
+        from nspe.policy.schema import Policy
+
+        policy = load_policy(_POLICY)
+        names = policy.predicate_names("base")
+        base = [p for p in policy.predicates if p.kind == "base"]
+        others = [p for p in policy.predicates if p.kind != "base"]
+        reordered = Policy(
+            name=policy.name,
+            predicates=tuple([base[1], base[0], *base[2:], *others]),
+            rules=policy.rules,
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = str(Path(tmp) / "mu0.json")
+            _write_mu0_dump(
+                path, torch.rand(8, len(names)), torch.zeros(8), policy, names, "cpu"
+            )
+            with self.assertRaisesRegex(ValueError, "predicate_names"):
+                load_mu0_dump(path, reordered)
+
+
 class TestSpreadSample(TestCase):
     """Published explanations must not all come from one class.
 

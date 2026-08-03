@@ -22,7 +22,10 @@ from torch import Tensor
 
 
 def predicate_stats(
-    mu0: Tensor, names: tuple[str, ...], tau: float = 0.5
+    mu0: Tensor,
+    names: tuple[str, ...],
+    tau: float = 0.5,
+    labels: Tensor | None = None,
 ) -> dict[str, dict[str, float]]:
     """Summarizes each predicate's behaviour over a split.
 
@@ -30,18 +33,24 @@ def predicate_stats(
         mu0: base predicate truth degrees, shape ``(batch, P)``.
         names: predicate names, length ``P``.
         tau: threshold defining "fired".
+        labels: binary ground truth, shape ``(batch,)``. When given, each
+            predicate also gets a ``label_correlation``.
 
     Returns:
         A dict keyed by predicate name, each holding ``mean``, ``std``,
         ``activation_rate``, and ``max_abs_correlation`` against any
-        other predicate. An activation rate near 0 or 1 means the
-        predicate never changes a signature; a high correlation means it
-        duplicates another predicate.
+        other predicate, plus ``label_correlation`` if ``labels`` was
+        given. An activation rate near 0 or 1 means the predicate never
+        changes a signature; a high correlation means it duplicates
+        another predicate; and predicates with similar
+        ``label_correlation`` carry interchangeable information about
+        the verdict even when they are not duplicates of each other.
     """
     num_predicates = mu0.shape[-1]
     activation = (mu0 >= tau).to(mu0.dtype)
+    have_spread = mu0.shape[0] > 1
 
-    if num_predicates > 1 and mu0.shape[0] > 1:
+    if num_predicates > 1 and have_spread:
         centered = mu0 - mu0.mean(dim=0, keepdim=True)
         std = centered.pow(2).mean(dim=0).sqrt().clamp(min=1e-6)
         correlation = (centered.T @ centered) / mu0.shape[0] / torch.outer(std, std)
@@ -50,15 +59,29 @@ def predicate_stats(
     else:
         max_correlation = torch.zeros(num_predicates)
 
-    return {
-        name: {
+    label_correlation = None
+    if labels is not None and have_spread:
+        target = labels.flatten().to(mu0.dtype)
+        centered = mu0 - mu0.mean(dim=0, keepdim=True)
+        std = centered.pow(2).mean(dim=0).sqrt().clamp(min=1e-6)
+        target_centered = target - target.mean()
+        target_std = target_centered.pow(2).mean().sqrt().clamp(min=1e-6)
+        label_correlation = (centered * target_centered.unsqueeze(1)).mean(dim=0) / (
+            std * target_std
+        )
+
+    stats = {}
+    for i, name in enumerate(names):
+        entry = {
             "mean": mu0[:, i].mean().item(),
             "std": mu0[:, i].std(unbiased=False).item(),
             "activation_rate": activation[:, i].mean().item(),
             "max_abs_correlation": max_correlation[i].item(),
         }
-        for i, name in enumerate(names)
-    }
+        if label_correlation is not None:
+            entry["label_correlation"] = label_correlation[i].item()
+        stats[name] = entry
+    return stats
 
 
 def signature_distribution(
