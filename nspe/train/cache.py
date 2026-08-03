@@ -58,7 +58,7 @@ def precompute_embeddings(
     num_workers: int = 4,
     model_name: str = "",
     pretrained: str = "",
-) -> dict[str, Tensor]:
+) -> dict[str, Tensor | str]:
     """Encodes a whole dataset once and writes the result to disk.
 
     Args:
@@ -101,7 +101,7 @@ def precompute_embeddings(
             chunks.append(fused.float().cpu())
             label_chunks.append(labels)
 
-    cache = {
+    cache: dict[str, Tensor | str] = {
         "embeddings": torch.cat(chunks),
         "labels": torch.cat(label_chunks),
         "model_name": model_name,

@@ -7,17 +7,17 @@ checkpoints.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from torch import Tensor
 
-from nspe.consistency import ConsistencyChecker
+from nspe.consistency import ConsistencyChecker, ConsistencyReport
 from nspe.eval.metrics import best_threshold, binary_metrics, calibration_report
 from nspe.explain import Explanation
 from nspe.reasoner import PolicyKGReasoner, ReasonerOutput
 
 
-def _report_to_dict(report: Any) -> dict[str, Any]:
+def _report_to_dict(report: ConsistencyReport) -> dict[str, Any]:
     return report.as_dict()
 
 
@@ -55,8 +55,9 @@ def compute_h1(
         ``worst_classes_reasoner`` / ``worst_classes_baseline`` lists.
     """
     checker = ConsistencyChecker(tau=tau, verdict_threshold=verdict_threshold)
-    reasoner_report = checker(mu0, reasoner_verdict)
-    baseline_report = checker(mu0, baseline_verdict)
+    # nn.Module.__call__ is typed to return Any.
+    reasoner_report = cast(ConsistencyReport, checker(mu0, reasoner_verdict))
+    baseline_report = cast(ConsistencyReport, checker(mu0, baseline_verdict))
     return {
         "reasoner": _report_to_dict(reasoner_report),
         "baseline": _report_to_dict(baseline_report),
@@ -243,7 +244,7 @@ def compute_calibration(
         ``calibrated`` reports plus an ``ece_reduction`` (positive when
         calibration helped).
     """
-    report = {"num_bins": num_bins}
+    report: dict[str, Any] = {"num_bins": num_bins}
     for arm, raw, calibrated in (
         ("reasoner", reasoner_raw, reasoner_calibrated),
         ("baseline", baseline_raw, baseline_calibrated),

@@ -49,7 +49,7 @@ class HatefulMemesDataset(Dataset[dict[str, Any]]):
         split: str = "train",
         transform: Callable[[Image.Image], Any] | None = None,
     ) -> None:
-        from datasets import load_dataset  # type: ignore[import-untyped]
+        from datasets import load_dataset  # type: ignore[import-not-found]
 
         hf_split = load_dataset(_REPO_ID)[split]
         available = _available_image_files()

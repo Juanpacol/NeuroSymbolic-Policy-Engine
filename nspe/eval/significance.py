@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import itertools
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, cast
 
 _MAX_N = 20
 _ALTERNATIVES = ("two-sided", "greater", "less")
@@ -57,7 +57,7 @@ def min_achievable_p(n: int, alternative: str = "two-sided") -> float:
     if n < 1:
         raise ValueError(f"n must be positive, got {n}")
     tails = 2 if alternative == "two-sided" else 1
-    return tails / 2**n
+    return cast(float, tails / 2**n)
 
 
 def sign_permutation_test(

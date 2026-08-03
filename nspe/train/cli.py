@@ -31,7 +31,7 @@ from __future__ import annotations
 import argparse
 import json
 from collections.abc import Callable, Sequence
-from typing import Any
+from typing import Any, cast
 
 import torch
 from torch import Tensor, nn
@@ -66,8 +66,8 @@ def _verdict_of(out: object) -> Tensor:
     """Prefers the calibrated verdict, falling back to the raw one."""
     calibrated = getattr(out, "calibrated", None)
     if calibrated is not None:
-        return calibrated[_VERDICT_NAME]
-    return out.verdicts[_VERDICT_NAME]  # type: ignore[attr-defined]
+        return cast(Tensor, calibrated[_VERDICT_NAME])
+    return cast(Tensor, out.verdicts[_VERDICT_NAME])  # type: ignore[attr-defined]
 
 
 def _reasoner_forward(model: PolicyEngine, images: Tensor, texts: list[str]) -> Tensor:
@@ -81,7 +81,8 @@ def _reasoner_forward_embedded(model: PolicyEngine, fused: Tensor, _: None) -> T
 def _baseline_forward(
     model: NeuralBaselineClassifier, images: Tensor, texts: list[str]
 ) -> Tensor:
-    return model(images, texts)
+    # nn.Module.__call__ is typed to return Any.
+    return cast(Tensor, model(images, texts))
 
 
 def _baseline_forward_embedded(
@@ -171,7 +172,7 @@ def _encoder_of(model: nn.Module) -> nn.Module:
 
 def _cached_loaders(
     model: nn.Module, preprocess: object, args: argparse.Namespace
-) -> tuple[DataLoader, DataLoader]:
+) -> tuple[DataLoader[Any], DataLoader[Any]]:
     """Builds loaders over cached embeddings, encoding splits if needed."""
     encoder = _encoder_of(model)
     loaders = []
@@ -239,7 +240,7 @@ def _require_both_classes(labels: Sequence[float], split: str, limit: int) -> No
 
 def _raw_loaders(
     preprocess: object, args: argparse.Namespace
-) -> tuple[DataLoader, DataLoader]:
+) -> tuple[DataLoader[Any], DataLoader[Any]]:
     """Builds loaders that encode images on the fly, every epoch."""
     from nspe.data.hateful_memes import HatefulMemesDataset
 
@@ -269,7 +270,7 @@ def _calibrator_of(model: nn.Module) -> VerdictCalibrator | None:
 def _warm_start(
     model: nn.Module,
     forward_fn: object,
-    loader: DataLoader,
+    loader: DataLoader[Any],
     device: str,
 ) -> tuple[float, float]:
     """Fits the calibrator bias to the training base rate.

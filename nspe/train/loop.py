@@ -261,7 +261,7 @@ def train_model(
             loss = _weighted_bce(verdict, labels, pos_weight)
             if aux_loss_fn is not None:
                 loss = loss + aux_loss_fn(model, inputs, aux)
-            loss.backward()
+            loss.backward()  # type: ignore[no-untyped-call]  # torch stub gap
             if max_grad_norm is not None:
                 torch.nn.utils.clip_grad_norm_(params, max_grad_norm)
             optimizer.step()

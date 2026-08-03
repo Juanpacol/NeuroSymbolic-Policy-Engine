@@ -20,6 +20,8 @@ originates.
 
 from __future__ import annotations
 
+from typing import cast
+
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
@@ -60,7 +62,8 @@ class PredicateTrunk(nn.Module):
         Returns:
             Tensor of shape ``(batch, out_dim)``.
         """
-        return self.body(fused)
+        # nn.Module.__call__ is typed to return Any.
+        return cast(Tensor, self.body(fused))
 
 
 class PredicateHead(nn.Module):

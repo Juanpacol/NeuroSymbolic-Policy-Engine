@@ -21,7 +21,7 @@ import glob
 import json
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from nspe.eval.metrics import mean_std
 from nspe.eval.significance import sign_permutation_test
@@ -89,7 +89,7 @@ def _backbone(result: dict[str, Any], source: str) -> str:
     """
     recorded = result.get("reasoner_config", {}).get("clip_model")
     if recorded:
-        return recorded
+        return cast(str, recorded)
     return "ViT-B-32-quickgelu" if "_b32_" in source else "ViT-L-14"
 
 

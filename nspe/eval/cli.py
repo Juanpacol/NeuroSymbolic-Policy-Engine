@@ -21,7 +21,7 @@ import json
 import platform
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import torch
 from torch.utils.data import DataLoader
@@ -193,6 +193,7 @@ def run_eval(
     )
     baseline.eval()
 
+    loader: DataLoader[Any]
     if cache_dir is not None:
         path = cache_path(cache_dir, split, clip_model, clip_pretrained)
         if not path.exists():
@@ -388,7 +389,8 @@ def resolve_thresholds(
             "--reasoner-threshold/--baseline-threshold) so the operating "
             "point comes from validation"
         )
-    return args.threshold
+    # args.threshold comes from argparse.Namespace, typed Any.
+    return cast("float | tuple[float, float] | None", args.threshold)
 
 
 def _fingerprint(policy_path: str) -> str:
