@@ -49,6 +49,29 @@ from nspe.train.dataset import collate_hateful_memes
 from nspe.train.loop import load_trainable_state_dict
 
 _VERDICT_NAME = "hateful"
+_NUM_EXPLANATIONS = 5
+
+
+def _spread_sample(indices: torch.Tensor, count: int) -> list[int]:
+    """Picks ``count`` indices spread across ``indices``, not the head.
+
+    This dataset's rows are ordered by label, so taking the first few
+    disagreements draws every sampled explanation from a single class --
+    which makes the published audit chains unrepresentative of the
+    split in exactly the dimension they are meant to illustrate.
+
+    Args:
+        indices: candidate row indices, ascending.
+        count: how many to select.
+
+    Returns:
+        Evenly spaced indices, or all of them if there are fewer than
+        ``count``.
+    """
+    if indices.numel() <= count:
+        return indices.tolist()
+    positions = torch.linspace(0, indices.numel() - 1, count).long()
+    return indices[positions].tolist()
 
 
 def _git_commit() -> str:
@@ -256,10 +279,20 @@ def run_eval(
     reasoner_pred = reasoner_verdict >= h3["reasoner"]["threshold"]
     baseline_pred = baseline_verdict >= h3["baseline"]["threshold"]
     disagreements = (reasoner_pred != baseline_pred).nonzero(as_tuple=True)[0]
-    sample_indices = disagreements[:5].tolist()
+    sample_indices = _spread_sample(disagreements, _NUM_EXPLANATIONS)
     h3["sample_explanations"] = sample_explanations(
         policy, reasoner, mu0, sample_indices, target=_VERDICT_NAME
     )
+    # The chains alone cannot say whether the reasoner was right. These
+    # are already in scope, so attaching them costs nothing and turns a
+    # sampled explanation into an auditable one.
+    for entry in h3["sample_explanations"]:
+        case = entry["case_index"]
+        entry["label"] = float(labels[case].item())
+        entry["reasoner_verdict"] = float(reasoner_verdict[case].item())
+        entry["baseline_verdict"] = float(baseline_verdict[case].item())
+        entry["reasoner_pred"] = bool(reasoner_pred[case].item())
+        entry["baseline_pred"] = bool(baseline_pred[case].item())
 
     return {
         "dataset": {

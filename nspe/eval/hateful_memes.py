@@ -203,7 +203,11 @@ def sample_explanations(
         results.append(
             {
                 "case_index": case_index,
+                # Both forms: the rendered chain is what a human reads in
+                # the results file, the tree is what a figure or an audit
+                # script consumes without re-parsing indentation.
                 "chain": explanations[0].render(),
+                "tree": explanations[0].as_dict(),
             }
         )
     return results

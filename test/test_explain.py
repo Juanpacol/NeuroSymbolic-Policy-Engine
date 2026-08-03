@@ -1,5 +1,7 @@
 """Tests for nspe.explain."""
 
+import json
+
 import torch
 from torch.testing._internal.common_utils import TestCase, run_tests
 
@@ -112,6 +114,64 @@ class TestAttribution(TestCase):
         out2 = reasoner(mu0_2)
         out2.verdicts["remove"].sum().backward()
         torch.testing.assert_close(grad, mu0_2.grad)
+
+
+class TestAsDict(TestCase):
+    def test_round_trips_through_json(self):
+        policy = _hate_speech_policy()
+        reasoner = PolicyKGReasoner(policy)
+        out = reasoner(torch.tensor([[0.9, 0.8, 0.1, 0.1]]))
+        explanation = reasoner.explain(out)[0]
+
+        # Must be JSON-serializable with no custom encoder: the whole
+        # point is landing in a results file.
+        payload = json.loads(json.dumps(explanation.as_dict()))
+
+        self.assertEqual(payload["verdict"], explanation.verdict)
+        self.assertEqual(payload["policy_fingerprint"], explanation.policy_fingerprint)
+        self.assertIn("root", payload)
+
+    def test_tree_shape_matches_the_rendered_chain(self):
+        policy = _hate_speech_policy()
+        reasoner = PolicyKGReasoner(policy)
+        out = reasoner(torch.tensor([[0.9, 0.8, 0.1, 0.1]]))
+        explanation = reasoner.explain(out)[0]
+
+        def count(node: dict) -> int:
+            return 1 + sum(count(c) for c in node["children"])
+
+        # One rendered line per node, plus one per defeated_by entry.
+        def defeats(node: dict) -> int:
+            return len(node["defeated_by"]) + sum(defeats(c) for c in node["children"])
+
+        payload = explanation.as_dict()
+        lines = len(explanation.render().splitlines())
+        self.assertEqual(lines, count(payload["root"]) + defeats(payload["root"]))
+
+    def test_leaf_carries_no_rule(self):
+        policy = _hate_speech_policy()
+        reasoner = PolicyKGReasoner(policy)
+        out = reasoner(torch.tensor([[0.9, 0.8, 0.1, 0.1]]))
+        root = reasoner.explain(out)[0].as_dict()["root"]
+
+        # root is `remove` -> `hate` (derived, via HS1) -> base leaves.
+        derived = root["children"][0]
+        self.assertEqual(derived["kind"], "derived")
+        self.assertEqual(derived["rule_id"], "HS1")
+        for leaf in derived["children"]:
+            self.assertEqual(leaf["kind"], "base")
+            self.assertIsNone(leaf["rule_id"])
+            self.assertIsNone(leaf["confidence"])
+            self.assertEqual(leaf["children"], [])
+
+    def test_records_the_concluding_rule(self):
+        policy = _hate_speech_policy()
+        reasoner = PolicyKGReasoner(policy)
+        out = reasoner(torch.tensor([[0.9, 0.8, 0.1, 0.1]]))
+        root = reasoner.explain(out)[0].as_dict()["root"]
+
+        self.assertEqual(root["rule_id"], "REMOVE1")
+        self.assertIsNotNone(root["confidence"])
 
 
 if __name__ == "__main__":

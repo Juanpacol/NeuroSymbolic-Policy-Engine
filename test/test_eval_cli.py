@@ -109,5 +109,41 @@ class TestResolveThresholds(TestCase):
             resolve_thresholds(_args(baseline_threshold=0.2))
 
 
+class TestSpreadSample(TestCase):
+    """The dataset's rows are label-sorted, so head-of-list sampling
+    draws every published explanation from one class.
+    """
+
+    def test_spreads_across_the_range_instead_of_taking_the_head(self):
+        import torch
+
+        from nspe.eval.cli import _spread_sample
+
+        disagreements = torch.arange(100)
+        picked = _spread_sample(disagreements, 5)
+
+        self.assertEqual(len(picked), 5)
+        self.assertEqual(picked[0], 0)
+        self.assertEqual(picked[-1], 99)
+        # The old behaviour was [0, 1, 2, 3, 4] -- entirely the head.
+        self.assertNotEqual(picked, list(range(5)))
+
+    def test_returns_everything_when_there_are_too_few(self):
+        import torch
+
+        from nspe.eval.cli import _spread_sample
+
+        self.assertEqual(_spread_sample(torch.tensor([7, 9]), 5), [7, 9])
+
+    def test_indices_stay_ascending_and_unique(self):
+        import torch
+
+        from nspe.eval.cli import _spread_sample
+
+        picked = _spread_sample(torch.arange(0, 200, 2), 5)
+        self.assertEqual(picked, sorted(picked))
+        self.assertEqual(len(set(picked)), len(picked))
+
+
 if __name__ == "__main__":
     run_tests()

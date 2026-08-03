@@ -12,7 +12,7 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import torch
 from torch import Tensor
@@ -48,6 +48,34 @@ class ExplanationNode:
     confidence: float | None = None
     children: list[ExplanationNode] = field(default_factory=list)
     defeated_by: list[tuple[str, float]] = field(default_factory=list)
+
+    def as_dict(self) -> dict[str, Any]:
+        """Returns this node and its subtree as a JSON-ready dict.
+
+        The rendered text is for a human reading a results file;
+        this is for anything that has to *process* the chain -- building
+        a figure, counting which rules fire, checking that a cited rule
+        exists in the policy. Recovering any of that by re-parsing
+        :meth:`render`'s indentation would be needless and fragile.
+
+        Returns:
+            A dict mirroring this node's fields, with ``children``
+            recursed and ``defeated_by`` pairs expanded into named
+            entries.
+        """
+        return {
+            "predicate": self.predicate,
+            "truth": self.truth,
+            "kind": self.kind,
+            "negated": self.negated,
+            "rule_id": self.rule_id,
+            "confidence": self.confidence,
+            "defeated_by": [
+                {"predicate": name, "effective_truth": truth}
+                for name, truth in self.defeated_by
+            ],
+            "children": [child.as_dict() for child in self.children],
+        }
 
     def render(self, indent: int = 0) -> str:
         """Renders this node (and its subtree) as indented text."""
@@ -85,6 +113,25 @@ class Explanation:
     root: ExplanationNode
     policy_fingerprint: str
 
+    def as_dict(self) -> dict[str, Any]:
+        """Returns the full explanation as a JSON-ready dict.
+
+        Carries ``policy_fingerprint`` alongside the tree so an audit
+        can confirm which compiled rule set produced the chain, rather
+        than trusting that the surrounding file was not reassembled.
+
+        Returns:
+            A dict with ``verdict``, ``case_index``, ``truth``,
+            ``policy_fingerprint`` and the nested ``root``.
+        """
+        return {
+            "verdict": self.verdict,
+            "case_index": self.case_index,
+            "truth": self.truth,
+            "policy_fingerprint": self.policy_fingerprint,
+            "root": self.root.as_dict(),
+        }
+
     def render(self) -> str:
         """Renders the full explanation tree as indented text."""
         return self.root.render()
@@ -115,14 +162,12 @@ def explain(
     """
     if out.fire_trace is None or out.mu_trace is None:
         raise ValueError(
-            "explain() requires a ReasonerOutput produced with "
-            "store_trace=True"
+            "explain() requires a ReasonerOutput produced with store_trace=True"
         )
     rt = reasoner.rule_tensor
     names = list(targets) if targets is not None else list(rt.verdict_names)
     return [
-        _explain_one(reasoner, out, name, case_index, visited=set())
-        for name in names
+        _explain_one(reasoner, out, name, case_index, visited=set()) for name in names
     ]
 
 
@@ -164,9 +209,7 @@ def _build_node(
 
     assert out.fire_trace is not None  # enforced by explain()'s guard
     fire_trace = out.fire_trace
-    candidates = [
-        r_i for r_i in range(rt.num_rules) if rt.head_idx[r_i].item() == idx
-    ]
+    candidates = [r_i for r_i in range(rt.num_rules) if rt.head_idx[r_i].item() == idx]
     floor = math.log(reasoner.eps)
     best_r, best_val = None, floor
     for r_i in candidates:
@@ -233,7 +276,5 @@ def attribution(verdict: Tensor, mu0: Tensor, retain_graph: bool = False) -> Ten
         Tensor of the same shape as ``mu0``: per-case, per-base-predicate
         sensitivity of ``verdict`` to that predicate's truth.
     """
-    (grad,) = torch.autograd.grad(
-        verdict.sum(), mu0, retain_graph=retain_graph
-    )
+    (grad,) = torch.autograd.grad(verdict.sum(), mu0, retain_graph=retain_graph)
     return grad
