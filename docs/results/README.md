@@ -43,6 +43,8 @@ ablation matrix.
 | `h1_h3/results_s{0..4}.json` | `python -m nspe.eval.cli --clip-model ViT-L-14 --cache-dir ./emb_cache --reasoner-checkpoint ... --baseline-checkpoint ... --split validation` (one per seed, checkpoints trained via `nspe.train.cli --seed {0..4}`) | Kaggle T4 |
 | `h1_h3/results_b32_s{0..4}.json` | Same, `--clip-model ViT-B-32-quickgelu` | Kaggle T4 |
 | `h1_h3/ablations.json` | `python -m nspe.ablate.cli --clip-model ViT-L-14 --cache-dir ./emb_cache --device cuda` | Kaggle T4 |
+| `h1_h3/results_val_s{0..4}.json` | Held-out-test rerun's validation pass -- fresh checkpoints, same protocol as `results_s*.json` above. Fits the thresholds `results_test_s*.json` applies. | Kaggle T4, commit `464a372` |
+| `h1_h3/results_test_s{0..4}.json` | `python -m nspe.eval.cli --clip-model ViT-L-14 --cache-dir ./emb_cache --split test --thresholds-from results_val_s{i}.json` (one per seed; `--split test` refuses to run without `--thresholds-from`) | Kaggle T4, commit `464a372` |
 
 ## Reading these
 

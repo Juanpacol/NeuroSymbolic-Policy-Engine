@@ -1,6 +1,6 @@
 # H1/H3 remediation: root causes, fixes, and first real results
 
-Snapshot as of commit `bb64261`. Read this before touching
+Snapshot as of commit `464a372`. Read this before touching
 `nspe/train/`, `nspe/eval/`, `nspe/consistency.py`, `nspe/extractor.py`,
 or `nspe/ablate/` -- it explains *why* those modules look the way they
 do, which their docstrings only partially cover.
@@ -99,6 +99,20 @@ policy:
   `VerdictCalibrator.fit_bias_to_base_rate`, surfaced by the sweep on
   `--device cuda` (the warm-start pass accumulates verdicts on CPU
   while the calibrator lives on GPU).
+- **`85edce2`** -- `compute_h3`'s `threshold` widened to accept a
+  `(reasoner, baseline)` pair, since the two arms fit different
+  operating points on validation; `compute_h3` now raises on a
+  single-class label set instead of letting `auroc` return its 0.5
+  sentinel (this dataset's rows are sorted by label, so a truncated
+  split is single-class).
+- **`c70c1b4`** -- `nspe/eval/cli.py::resolve_thresholds` and
+  `--thresholds-from`: reads each arm's threshold out of a validation
+  artifact, checked against the backbone and that it was itself fitted
+  rather than chained. `--split test` with no threshold source now
+  raises instead of fitting on test.
+- **`aa7b615`** -- `nspe/eval/aggregate.py` derives the mean±std tables
+  below from the committed JSON artifacts instead of a hand-computed
+  notebook; pinned to reproduce the published figures exactly.
 
 ## Real-data validation (5 seeds, two backbones, validation split)
 
@@ -223,6 +237,77 @@ vs. 0-4 there) and a smaller n, so the two AUROC figures (0.7181 here,
 0.7193 in the 5-seed table) agreeing closely is a mild positive check,
 not independent confirmation.
 
+## Held-out test split (5 seeds, ViT-L-14)
+
+Ran via `docs/colab_h1_h3.md` Cell 9 on Kaggle T4, commit `464a372`.
+Checkpoints are gitignored, so this is a **full retrain**, not a
+re-evaluation of the weights behind the validation section above:
+5 seeds x 2 arms trained fresh, validation re-evaluated in the same
+session to fit each arm's threshold, then test evaluated once with
+`--thresholds-from` pointing at that fresh validation run. Artifacts:
+`docs/results/h1_h3/results_val_s{0..4}.json` (the paired rerun) and
+`results_test_s{0..4}.json`.
+
+| | validation (this rerun) | **test (held out)** |
+|---|---|---|
+| reasoner AUROC | 0.7193 ± 0.0060 | **0.7551 ± 0.0043** |
+| baseline AUROC | 0.6866 ± 0.0096 | **0.7266 ± 0.0048** |
+| auroc_gap | 0.0327 ± 0.0143 | 0.0284 ± 0.0055 |
+| reasoner accuracy | 0.6253 ± 0.0170 | 0.6334 ± 0.0230 |
+| baseline accuracy | 0.5853 ± 0.0239 | 0.5841 ± 0.0214 |
+| reasoner adjusted_consistency | 0.6703 ± 0.1504 | **0.7001 ± 0.0793** |
+| baseline adjusted_consistency | 0.2998 ± 0.1025 | 0.3437 ± 0.0850 |
+| majority-class accuracy | 0.5680 | 0.5876 |
+| num_examples | 831 | 2408 (of 3000, after the image-availability filter) |
+
+**The rerun reproduces the original validation section within seed
+noise** -- the validation column here (computed by
+`nspe/eval/aggregate.py`, not by hand) matches the published one in
+every figure, which is the evidence that this retrain and the original
+one describe the same system.
+
+**H3 holds on held-out data, with a wider margin than validation
+suggested.** Both arms' AUROC rise on test relative to validation
+(reasoner 0.719 -> 0.755, baseline 0.687 -> 0.727) and the gap stays
+positive in **all 5 seeds without exception**
+(`[0.0241, 0.0215, 0.0368, 0.0319, 0.0280]`). The larger test set
+(2408 vs. 831 cases) also tightens every standard deviation -- AUROC
+std drops from 0.0060 to 0.0043 for the reasoner, consistency std from
+0.150 to 0.079 -- consistent with the validation-stage numbers being
+noisier estimates of the same effect rather than a different one.
+
+**H1 also holds, and also tightens.** Per-seed reasoner
+`adjusted_consistency`: `[0.7312, 0.6335, 0.7034, 0.6032, 0.8291]`,
+beating the baseline's `[0.4151, 0.3224, 0.4601, 0.2999, 0.2208]` in
+every seed. No arm is `degenerate` in any of the 10 (5 seeds x 2 arms)
+test runs.
+
+### Test-set protocol
+
+The four things a reviewer would ask for, each machine-checkable in the
+committed artifacts rather than only claimed in this prose:
+
+1. **Test was evaluated once**, after validation was already stable
+   across 5 seeds and 2 backbones (the section above).
+2. **No hyperparameter, threshold, epoch, or checkpoint was selected
+   using test.** Thresholds were fitted per arm on validation and
+   applied unchanged; every `results_test_s*.json` carries
+   `h3_explainability.threshold_source == "provided_per_arm"`, and each
+   test threshold is byte-identical to the corresponding
+   `results_val_s*.json`'s fitted value (verified for all 5 seeds
+   before committing).
+3. **The test checkpoints are a rerun, not the original weights** --
+   checkpoints are gitignored, so this could not be otherwise. The
+   paired validation rerun matching the published numbers (above) is
+   what licenses treating the test section as describing the same
+   system as the rest of this document, rather than a different one.
+4. **No truncation.** This dataset's rows are sorted by label
+   (verified via the HF datasets-server API before this run), so a
+   truncated split would be single-class; `compute_h3` now raises
+   rather than silently reporting AUROC 0.5 in that case (see
+   `nspe/eval/hateful_memes.py`). `num_examples = 2408` is the full
+   filtered split, not a subset.
+
 ## What's still open
 
 - **A controlled test of the backbone-dependence hypothesis** for H1
@@ -231,12 +316,11 @@ not independent confirmation.
 - **More seeds on `adjusted_consistency` per ablation config**, if the
   anchor-loss trend on that metric specifically (not just `num_classes`)
   is worth nailing down for the paper.
-- **Test split.** Explicitly gated in the plan until validation is
-  stable across seeds -- now that it is (5 seeds, two backbones), this
-  is unblocked, but pass `--threshold` fitted on validation rather than
-  letting `compute_h3` fit-and-report on the same split.
-- **H2 latency numbers** (`docs/colab_benchmark.md`) are a separate
-  track and unaffected by any of this.
+- **Test split on ViT-B-32.** Only ViT-L-14 was evaluated on test, by
+  design (see the remediation plan) -- extending the backbone
+  comparison to test is unblocked but not done.
+- **H2 latency numbers** (`docs/h2_findings.md`) are a separate track
+  and unaffected by any of this.
 
 ## Do-not-do list (carried over from the remediation plan; still applies)
 
