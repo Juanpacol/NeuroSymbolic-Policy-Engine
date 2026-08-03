@@ -498,21 +498,54 @@ substantially weaker than "the rules carry the accuracy". That
 restatement is the committed response to that outcome; it is written
 down here so it cannot be rationalized away afterwards.
 
+## Zero-shot-only diagnostic: is it the wiring, or the grounding?
+
+The control above leaves open *why* scrambling doesn't hurt: one live
+explanation was that gradient descent re-purposes what each predicate
+head detects to fit whichever rules it's given -- correct or scrambled
+-- eroding any advantage the correct wiring had by the time training
+finishes. `--epochs 0` (`nspe/train/loop.py`) tests this directly by
+comparing intact vs. scrambled **before any training happens at all**,
+right at the CLIP zero-shot-seeded initialization
+(`PredicateHead.zero_shot_weight`, which dominates the still-near-zero
+freshly-initialized linear head at step 0 -- see `nspe/trunk.py`).
+10 seeds, validation split, same ten scrambled policies as the main
+control.
+
+| | AUROC at init (no training) |
+|---|---|
+| intact | 0.4993 ± 0.0307 |
+| scrambled | 0.4934 ± 0.0311 |
+| gap, p (one-sided) | +0.0059, p=0.26 (5/10 seeds positive) |
+
+**Both are at chance, and indistinguishable from each other.** This
+rules out the re-purposing hypothesis directly: there is no
+correct-wiring advantage at initialization for training to erase,
+because the zero-shot CLIP grounding alone -- one text-encoded
+description per predicate -- carries essentially no signal about the
+verdict on its own, regardless of which predicate a rule reads. Whatever
+signal the trained model eventually has must come almost entirely from
+the *learned* trunk/head weights shaped over training, not from the
+predicate identities' initial semantic grounding. That reframes the
+post-training null result: it isn't that correct wiring helps and
+training erases it -- wiring was never where the advantage lived, at
+either end of training. What remains open is why the *learned* heads
+end up similarly informative under either wiring; see below.
+
 ## What's still open
 
-- **Why scrambling doesn't hurt accuracy is itself now an open
-  question.** The control's negative result (above) says the wiring
-  isn't what's carrying AUROC, but not *why not* -- candidates worth a
-  sentence each in the paper's discussion: the base predicates may be
-  correlated enough with each other and with the label that most
-  derangements land on comparably-informative combinations; the rule
+- **Why scrambling doesn't hurt accuracy is narrower now, but still
+  open.** The zero-shot diagnostic above rules out one explanation
+  (training erasing an initial wiring advantage -- there was none to
+  erase) but not the others: the base predicates may be correlated
+  enough with each other and with the label that most derangements land
+  on comparably-informative combinations once trained; the rule
   confidences and t-conorm aggregation may dominate over which specific
   predicate sits in which slot; or six predicates may simply be too few
-  for a random derangement to land on a genuinely uninformative wiring
-  most of the time. Distinguishing these would need either a
-  larger/more heterogeneous predicate set or a targeted adversarial
-  scramble (worst-case derangement, not a random one), neither
-  attempted here.
+  for a random derangement to land on a genuinely uninformative wiring.
+  Distinguishing these would need either a larger/more heterogeneous
+  predicate set or a targeted adversarial scramble (worst-case
+  derangement, not a random one), neither attempted here.
 - **A controlled test of the backbone-dependence hypothesis** for H1
   (ViT-L-14 vs. ViT-B-32 findings above), if it's worth pursuing further
   than the observational finding already recorded.
