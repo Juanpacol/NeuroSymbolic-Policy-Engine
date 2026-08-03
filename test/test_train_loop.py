@@ -291,6 +291,31 @@ class TestTrainModel(TestCase):
         model = _ToyModelWithBackbone()
         load_trainable_state_dict(model, model.state_dict())
 
+    def test_zero_epochs_saves_the_untrained_model_unconditionally(self):
+        # The zero-shot-only control needs exactly this: a checkpoint of
+        # the model as constructed, with no gradient step taken.
+        model = _ToyModel()
+        initial_weight = model.linear.weight.clone()
+        val_batches = list(_toy_batches(n_batches=2, batch_size=16, seed=1))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            checkpoint_path = Path(tmp) / "model.pt"
+            result = train_model(
+                model,
+                forward_fn=_forward,
+                train_loader=[],
+                val_loader=val_batches,
+                epochs=0,
+                device="cpu",
+                checkpoint_path=checkpoint_path,
+            )
+
+            self.assertTrue(checkpoint_path.exists())
+            self.assertEqual(result["best_epoch"], 0)
+            self.assertEqual(len(result["history"]), 1)
+            state = torch.load(checkpoint_path, weights_only=True)
+            torch.testing.assert_close(state["linear.weight"], initial_weight)
+
     def test_rejects_unknown_select_metric(self):
         with self.assertRaises(ValueError):
             train_model(

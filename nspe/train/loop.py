@@ -192,7 +192,13 @@ def train_model(
             embedding already carries them).
         val_loader: yields batches in the same shape, used for
             checkpoint selection only (no gradient updates).
-        epochs: maximum passes over ``train_loader``.
+        epochs: maximum passes over ``train_loader``. ``0`` skips
+            training entirely and saves the model exactly as
+            constructed -- for :class:`~nspe.extractor.NeuroSymbolicLayer`
+            this is the CLIP zero-shot-seeded residual with an
+            otherwise-random trunk/head, which is a deliberate
+            zero-shot-only baseline, not a degenerate case to special
+            case away.
         lr: AdamW learning rate.
         weight_decay: AdamW weight decay.
         pos_weight: up-weight applied to positive-class BCE terms.
@@ -249,6 +255,25 @@ def train_model(
     best_epoch, best_val_loss = -1, float("inf")
     train_losses: list[float] = []
     history: list[dict[str, float]] = []
+
+    if epochs == 0:
+        metrics = _evaluate(model, forward_fn, val_loader, device, pos_weight)
+        history.append(metrics)
+        best_score = metrics[select_metric] if maximize else metrics["loss"]
+        best_epoch, best_val_loss = 0, metrics["loss"]
+        if checkpoint_path is not None:
+            path = Path(checkpoint_path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            torch.save(trainable_state_dict(model), path)
+        return {
+            "best_val_loss": best_val_loss,
+            "best_metric": best_score,
+            "best_epoch": best_epoch,
+            "select_metric": select_metric,
+            "train_losses": train_losses,
+            "history": history,
+            "val_losses": [m["loss"] for m in history],
+        }
 
     for epoch in range(epochs):
         model.train()
