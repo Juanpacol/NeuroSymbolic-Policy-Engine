@@ -308,6 +308,59 @@ committed artifacts rather than only claimed in this prose:
    `nspe/eval/hateful_memes.py`). `num_examples = 2408` is the full
    filtered split, not a subset.
 
+## Pre-registration: the scrambled-policy control
+
+**Written before the control was run. Results go in a separate section
+below; this one is not to be edited afterwards.**
+
+Every H1/H3 number above comes from a single policy, which leaves the
+central question of this project unanswered: is the reasoner's
+advantage a property of *the rules*, or merely of having a fixed
+nonlinear aggregator where the baseline has a learned linear one? A
+reviewer will ask. The control that answers it is
+`nspe/policy/scramble.py`: a global derangement over the six base
+predicate names, applied to rule bodies and `unless` clauses only.
+
+What is held fixed is the point. The rule graph, the rule ids, the
+confidences, the number of parameters, the shared `PredicateTrunk`, and
+every predicate description all stay identical -- so
+`init_heads_from_descriptions` grounds each predicate head to exactly
+the semantics it had before. The scrambled model has the same capacity
+and the same computation, wired to the wrong evidence. The permutation
+is a bijection rather than a per-slot shuffle, which is what keeps a
+body from acquiring a duplicate literal (`mu^2` under the product
+t-norm is a semantic change, not a rewiring).
+
+Protocol: reasoner arm only, seeds 0-9, ViT-L-14, both splits. The
+baseline consumes the policy solely for `num_predicates` (unchanged at
+6), so it is genuinely invariant to the scramble and the intact
+baselines are reused deliberately. Each scrambled run reads its
+threshold from its *own* validation artifact.
+
+### Predictions
+
+1. **Intact > scrambled on AUROC**, one-sided, direction registered
+   here. This is the primary outcome.
+2. **`adjusted_consistency` roughly unchanged.** Consistency is a
+   structural property of the rule graph, which the rewiring preserves
+   exactly. A large move here would mean the metric is tracking
+   something other than what it is claimed to track, and would need
+   explaining before either number is reported.
+3. **Scrambled still above chance.** The trunk and the heads can still
+   learn; the rules being wrong degrades the signal, it does not
+   destroy it.
+
+### The falsifying outcome, named in advance
+
+If scrambled AUROC is statistically indistinguishable from intact, the
+policy contributes nothing measurable and H3's framing does not
+survive. The claim would then have to be restated as "a fixed
+nonlinear aggregator beats a learned linear one at matched capacity" --
+still a real result, and still consistent with the H2 latency work, but
+substantially weaker than "the rules carry the accuracy". That
+restatement is the committed response to that outcome; it is written
+down here so it cannot be rationalized away afterwards.
+
 ## What's still open
 
 - **A controlled test of the backbone-dependence hypothesis** for H1
