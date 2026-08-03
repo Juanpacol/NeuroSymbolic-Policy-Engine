@@ -32,7 +32,10 @@ reasoning as external to, or separate from, neural training. This is the gap the
 project fills, mapping directly to **H2**. Sources 6-9 below close a second gap
 flagged in `CLAUDE.md`: no fuzzy-logic/t-norm-specific sources had been reviewed
 before implementing `nspe/logic/tnorm.py`, and no Hateful-Memes-specific prior work
-had been reviewed before choosing that benchmark for H1/H3.
+had been reviewed before choosing that benchmark for H1/H3. Source 10 closes a
+third gap found during the H2 hardening pass: the Clingo baseline itself
+(`nspe/bench/clingo_engine.py`) was never cited as related work, despite already
+being run and described using that paper's own terminology.
 
 ## Source Summary Table
 
@@ -47,6 +50,7 @@ had been reviewed before choosing that benchmark for H1/H3.
 | 7 | T-Norms Driven Loss Functions for Machine Learning | Applied Intelligence (Springer), 2023 | H2 / loss-function design (`nspe/train/loop.py`) |
 | 8 | Uncertainty-Guided Modal Rebalance for Hateful Memes Detection | ACL 2024 | Related Work (Hateful Memes baselines) |
 | 9 | HateXplain: A Benchmark Dataset for Explainable Hate Speech Detection | AAAI 2021 | H3 / Explainability precedent |
+| 10 | Multi-Shot ASP Solving with clingo | Theory and Practice of Logic Programming, 2019 | H2 / baseline system (`nspe/bench/clingo_engine.py`) |
 
 ## Source Details
 
@@ -353,6 +357,48 @@ distinct, separately-measured hypothesis, and a natural citation point for contr
 this project's rule-grounded explanations against extractive-rationale explainability
 work in the same problem domain.
 
+### 10. Multi-Shot ASP Solving with clingo (Gebser, Kaminski, Kaufmann, Schaub —
+*Theory and Practice of Logic Programming*, 19(1), 27-82, Cambridge University Press,
+2019; arXiv:1705.09811)
+
+Key contributions:
+- Defines **multi-shot solving**: repeatedly querying a single grounded logic
+  program under different assumptions, without re-grounding or re-parsing between
+  queries, via clingo's `Control` API and its `--const`/assumption mechanism.
+- Formalizes this against the alternative of invoking a solver fresh per query
+  (single-shot), showing multi-shot avoids paying grounding cost on every call --
+  the dominant cost for a program whose rule set is fixed and whose per-query
+  input (the facts) varies.
+- clingo is the reference implementation of this API, combining the gringo
+  grounder with the clasp solver under one control interface.
+
+Technical detail relevant to this project:
+
+- This is the citation `docs/h2_findings.md` was missing for a term it already
+  uses without one: `nspe/bench/clingo_engine.py::ClingoEngine.infer_verdicts`
+  grounds the policy once at construction and sets per-case facts via solver
+  assumptions on each call, which is precisely the pattern this paper defines and
+  names. Without this source, "multi-shot" reads as an implementation detail this
+  project invented rather than the established terminology for the standard,
+  fair way to benchmark an ASP program.
+- It also sharpens what H2 is and is not claiming. The paper's own point is that
+  multi-shot solving already eliminates the naive per-query grounding overhead --
+  so `docs/h2_findings.md`'s baseline is not a strawman single-shot Clingo, it is
+  Clingo run the way its own authors designed it to be run for exactly this kind
+  of repeated-query workload. The latency gap this project measures is therefore
+  overhead intrinsic to solving as stable-model search on a CPU-bound grounded
+  program, not an artifact of an unfair harness.
+
+Citable claim: *Multi-shot solving, in which one grounded program answers many
+queries via solver assumptions rather than being re-grounded per query, is the
+standard and most favorable way to operate an ASP solver under a fixed rule set
+and varying input facts.*
+
+Relevance to this project: Direct citation for the Clingo baseline underlying
+H2 -- without it, the project's core engineering claim (GPU-native differentiable
+reasoning beats an external rule engine) compares against an unnamed, uncited
+system rather than a specific, correctly-configured one.
+
 ## Overall Conclusion Supported by These Sources
 
 - **Interpretability** improves because knowledge graphs and symbolic reasoning allow
@@ -363,7 +409,7 @@ work in the same problem domain.
   learning capabilities of LLMs and making the overall system more explainable and
   trustworthy.
 
-Together, these nine works form a solid bibliographic foundation for arguing that
+Together, these ten works form a solid bibliographic foundation for arguing that
 combining LLMs, knowledge graphs, and symbolic reasoning can improve the interpretability
 and consistency of AI systems — while also flagging challenges such as scalability, graph
 maintenance, and computational cost.
@@ -377,6 +423,10 @@ separate evaluation — the structural justification for why H3 is stated as its
 hypothesis rather than assumed — while the UMR paper (8) calibrates what a competitive
 2024 purely-neural Hateful Memes baseline looks like, and confirms that even
 state-of-the-art neural approaches in this exact task do not address auditability.
+Source 10 closes the remaining gap on H2's other side: it is the reference for the
+Clingo baseline itself, establishing that this project's ASP comparison point is run
+the way its own authors designed it to be run (multi-shot, one grounding, per-query
+assumptions), not a strawman single-shot configuration.
 
 ---
 
