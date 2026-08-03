@@ -10,12 +10,15 @@ H1/H3 numbers come from `docs/colab_h1_h3.md`; this is the secondary
 table that says which pieces of the design the numbers actually depend
 on.
 
-Every knob swept here is reasoner-only -- `nspe.train.cli._build_model`
-passes `learnable_confidence`/`aggregate` solely to the
-`PolicyKGReasoner`, and `_make_aux_loss` returns `None` for anything
-that is not a `PolicyEngine` -- so the neural baseline is invariant
-across the whole sweep and is trained once per seed rather than once
-per configuration.
+Knobs fall into two groups, and conflating them is a real hazard.
+`_REASONER_ONLY` settings reach only the `PolicyKGReasoner` (via
+`nspe.train.cli._build_model`) or only the auxiliary loss (which
+`_make_aux_loss` gates on `PolicyEngine`), so the baseline is
+bit-identical across them and is trained once per seed. `_BOTH_ARMS`
+settings configure the shared `PredicateTrunk`, which the baseline
+mounts too -- applying one to the reasoner alone would compare arms of
+different capacity while looking like a clean ablation, which is
+precisely the confound `nspe/trunk.py` exists to remove.
 
 The sweep is resumable. A free-tier GPU session can disappear without
 warning partway through twenty-odd runs, so the results file is
@@ -51,10 +54,35 @@ _ABLATIONS: tuple[dict[str, Any], ...] = (
     {"name": "anchor_0.3", "lambda_anchor": 0.3},
     {"name": "learnable_confidence", "learnable_confidence": True},
     {"name": "pmean", "aggregate": "pmean"},
+    # Both arms lose the trunk, so this asks whether the shared
+    # nonlinear bottleneck is load-bearing -- with the capacity match
+    # preserved rather than traded away for the answer.
+    {"name": "linear_probe", "hidden_dim": 0},
 )
 
 # Overrides that are store_true flags: present or absent, never valued.
 _BOOLEAN_OVERRIDES = frozenset({"learnable_confidence"})
+
+# nspe.train.cli._build_model routes these solely into PolicyKGReasoner,
+# so the baseline is bit-identical across them and is trained once per
+# seed rather than once per configuration.
+_REASONER_ONLY = frozenset(
+    {
+        "lambda_anchor",
+        "lambda_decorr",
+        "lambda_entropy",
+        "learnable_confidence",
+        "aggregate",
+        "pmean_p",
+        "no_description_init",
+    }
+)
+
+# NeuralBaselineClassifier mounts the *same* PredicateTrunk, so these
+# must reach both arms. Applying a trunk knob to the reasoner alone
+# would reintroduce exactly the capacity confound nspe/trunk.py exists
+# to eliminate, while looking like a clean ablation.
+_BOTH_ARMS = frozenset({"hidden_dim", "dropout"})
 
 
 def _git_commit() -> str:
@@ -88,6 +116,47 @@ def config_names() -> tuple[str, ...]:
 def _overrides(config: dict[str, Any]) -> dict[str, Any]:
     """Strips the bookkeeping ``name`` from a configuration."""
     return {k: v for k, v in config.items() if k != "name"}
+
+
+def baseline_tag(overrides: dict[str, Any]) -> str:
+    """Returns the cache tag identifying a baseline's configuration.
+
+    Configurations that only touch the reasoner all share one baseline
+    per seed, which is most of the point of the sweep's caching. A
+    configuration that changes the shared trunk does not: reusing a
+    256-wide baseline for a linear-probe run would compare arms of
+    different capacity and quietly undo the matching.
+
+    Args:
+        overrides: the configuration's settings.
+
+    Returns:
+        ``"shared"`` when nothing touching both arms is set, else a slug
+        naming what does.
+    """
+    shared = sorted(k for k in overrides if k in _BOTH_ARMS)
+    if not shared:
+        return "shared"
+    return "-".join(f"{k}{overrides[k]}" for k in shared)
+
+
+def _validate_taxonomy() -> None:
+    """Fails fast if a configuration key is not routed to any arm.
+
+    An unclassified key would silently be treated as reasoner-only,
+    which is the wrong default for anything touching the shared trunk.
+    """
+    known = _REASONER_ONLY | _BOTH_ARMS
+    for config in _ABLATIONS:
+        for key in _overrides(config):
+            if key not in known:
+                raise AssertionError(
+                    f"{key!r} in config {config['name']!r} is in neither "
+                    "_REASONER_ONLY nor _BOTH_ARMS"
+                )
+
+
+_validate_taxonomy()
 
 
 def train_tokens(
@@ -140,17 +209,15 @@ def train_tokens(
         if value is not None:
             tokens += [limit, str(value)]
 
-    # The baseline is invariant to every ablation knob, so applying the
-    # overrides to it would be meaningless at best and misleading at
-    # worst -- two "different" baselines that are bit-identical.
-    if model == "reasoner":
-        for key, value in overrides.items():
-            flag = "--" + key.replace("_", "-")
-            if key in _BOOLEAN_OVERRIDES:
-                if value:
-                    tokens.append(flag)
-            else:
-                tokens += [flag, str(value)]
+    for key, value in overrides.items():
+        if model == "baseline" and key not in _BOTH_ARMS:
+            continue
+        flag = "--" + key.replace("_", "-")
+        if key in _BOOLEAN_OVERRIDES:
+            if value:
+                tokens.append(flag)
+        else:
+            tokens += [flag, str(value)]
     return tokens
 
 
@@ -211,12 +278,16 @@ def run_ablations(
                 print(f"skip {run_id} (already in results)")
                 continue
 
-            baseline_path = checkpoints / f"baseline_seed{seed}.pt"
+            baseline_path = (
+                checkpoints / f"baseline_{baseline_tag(overrides)}_seed{seed}.pt"
+            )
             if not baseline_path.exists():
                 print(f"train baseline seed={seed}")
                 train_one(
                     build_parser().parse_args(
-                        train_tokens("baseline", seed, str(baseline_path), {}, args)
+                        train_tokens(
+                            "baseline", seed, str(baseline_path), overrides, args
+                        )
                     )
                 )
 
@@ -242,6 +313,10 @@ def run_ablations(
                 clip_model=args.clip_model,
                 clip_pretrained=args.clip_pretrained,
                 cache_dir=args.cache_dir,
+                # hidden_dim included: run_eval rebuilds both arms to
+                # load the checkpoints into, and a width mismatch fails
+                # on the head shapes.
+                hidden_dim=overrides.get("hidden_dim", args.hidden_dim),
                 learnable_confidence=overrides.get("learnable_confidence", False),
                 aggregate=overrides.get("aggregate", "tconorm"),
                 pmean_p=overrides.get("pmean_p", 2.0),
@@ -302,6 +377,8 @@ def main() -> None:
         "re-run a single one.",
     )
     parser.add_argument("--epochs", type=int, default=30)
+    parser.add_argument("--hidden-dim", type=int, default=256)
+    parser.add_argument("--dropout", type=float, default=0.2)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--device", default="cpu", choices=["cpu", "mps", "cuda"])
     parser.add_argument("--clip-model", default="ViT-L-14")

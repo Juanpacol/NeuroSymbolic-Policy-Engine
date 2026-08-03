@@ -25,6 +25,8 @@ def _args(**overrides) -> argparse.Namespace:
         seeds=list(_SEEDS),
         configs=list(ablate.config_names()),
         epochs=1,
+        hidden_dim=256,
+        dropout=0.2,
         batch_size=32,
         device="cpu",
         clip_model="ViT-L-14",
@@ -88,12 +90,9 @@ class _TempDirMixin:
 
 class TestConfigMatrix(_TempDirMixin, TestCase):
     def test_matrix_shape_and_unique_run_ids(self):
-        with self.subTest("configs"):
-            self.assertEqual(len(ablate.config_names()), 6)
-
         rows, _, _ = _stub_sweep(self, _args(ckpt_dir=self._tmp()))
 
-        self.assertEqual(len(rows), 6 * len(_SEEDS))
+        self.assertEqual(len(rows), len(ablate.config_names()) * len(_SEEDS))
         self.assertEqual(len({r["run_id"] for r in rows}), len(rows))
 
     def test_configs_can_be_narrowed(self):
@@ -158,20 +157,25 @@ class TestTrainTokens(TestCase):
 
 
 class TestSweepBookkeeping(_TempDirMixin, TestCase):
-    def test_baseline_is_trained_once_per_seed(self):
+    def test_baseline_is_trained_once_per_seed_per_trunk_config(self):
         _, trained, _ = _stub_sweep(self, _args(ckpt_dir=self._tmp()))
 
         baselines = [a for a in trained if a.model == "baseline"]
         reasoners = [a for a in trained if a.model == "reasoner"]
-        self.assertEqual(len(baselines), len(_SEEDS))
-        self.assertEqual(len(reasoners), 6 * len(_SEEDS))
-        self.assertEqual(sorted(a.seed for a in baselines), _SEEDS)
+        self.assertEqual(len(reasoners), len(ablate.config_names()) * len(_SEEDS))
+
+        # Every reasoner-only config shares one baseline per seed; each
+        # distinct trunk configuration needs its own, or the arms would
+        # no longer be capacity-matched.
+        tags = {ablate.baseline_tag(ablate._overrides(c)) for c in ablate._ABLATIONS}
+        self.assertEqual(len(baselines), len(tags) * len(_SEEDS))
 
     def test_resume_skips_completed_runs(self):
         done = {"anchor_0.0/seed0", "anchor_0.0/seed1", "pmean/seed2"}
         rows, trained, _ = _stub_sweep(self, _args(ckpt_dir=self._tmp()), done=done)
 
-        self.assertEqual(len(rows), 6 * len(_SEEDS) - len(done))
+        expected = len(ablate.config_names()) * len(_SEEDS) - len(done)
+        self.assertEqual(len(rows), expected)
         self.assertFalse(done & {r["run_id"] for r in rows})
         self.assertEqual(len([a for a in trained if a.model == "reasoner"]), len(rows))
 
@@ -190,6 +194,86 @@ class TestSweepBookkeeping(_TempDirMixin, TestCase):
         self.assertFalse(by_run["pmean/seed0"]["learnable_confidence"])
         self.assertTrue(by_run["learnable_confidence/seed0"]["learnable_confidence"])
         self.assertEqual(by_run["learnable_confidence/seed0"]["aggregate"], "tconorm")
+
+
+class TestOverrideRouting(_TempDirMixin, TestCase):
+    """The baseline mounts the same trunk, so trunk knobs must reach it.
+
+    Applying one to the reasoner alone would compare arms of different
+    capacity while looking like a clean ablation.
+    """
+
+    def test_shared_trunk_override_reaches_the_baseline(self):
+        args = _args()
+        tokens = ablate.train_tokens(
+            "baseline", 0, "/tmp/b.pt", {"hidden_dim": 0}, args
+        )
+        self.assertIn("--hidden-dim", tokens)
+        self.assertEqual(build_parser().parse_args(tokens).hidden_dim, 0)
+
+    def test_reasoner_only_override_does_not_reach_the_baseline(self):
+        tokens = ablate.train_tokens(
+            "baseline", 0, "/tmp/b.pt", {"aggregate": "pmean"}, _args()
+        )
+        self.assertNotIn("--aggregate", tokens)
+        self.assertEqual(build_parser().parse_args(tokens).aggregate, "tconorm")
+
+    def test_every_ablation_key_is_classified(self):
+        known = ablate._REASONER_ONLY | ablate._BOTH_ARMS
+        for config in ablate._ABLATIONS:
+            for key in ablate._overrides(config):
+                self.assertIn(key, known, f"{config['name']}.{key}")
+
+    def test_taxonomy_sets_are_disjoint(self):
+        self.assertEqual(ablate._REASONER_ONLY & ablate._BOTH_ARMS, set())
+
+
+class TestBaselineTag(_TempDirMixin, TestCase):
+    def test_reasoner_only_configs_share_one_baseline(self):
+        self.assertEqual(ablate.baseline_tag({"aggregate": "pmean"}), "shared")
+        self.assertEqual(ablate.baseline_tag({"lambda_anchor": 0.3}), "shared")
+        self.assertEqual(ablate.baseline_tag({}), "shared")
+
+    def test_trunk_configs_get_their_own_baseline(self):
+        self.assertNotEqual(ablate.baseline_tag({"hidden_dim": 0}), "shared")
+
+    def test_different_widths_do_not_collide(self):
+        self.assertNotEqual(
+            ablate.baseline_tag({"hidden_dim": 0}),
+            ablate.baseline_tag({"hidden_dim": 512}),
+        )
+
+    def test_baseline_checkpoints_differ_across_trunk_widths(self):
+        rows, trained, _ = _stub_sweep(
+            self,
+            _args(
+                configs=["anchor_0.1", "linear_probe"],
+                seeds=[0],
+                ckpt_dir=self._tmp(),
+            ),
+        )
+        baselines = {a.out for a in trained if a.model == "baseline"}
+
+        self.assertEqual(len(rows), 2)
+        # One baseline per distinct trunk configuration, not one total.
+        self.assertEqual(len(baselines), 2)
+
+
+class TestHiddenDimReachesEval(_TempDirMixin, TestCase):
+    def test_eval_receives_the_configs_width_not_the_default(self):
+        rows, _, evaluated = _stub_sweep(
+            self, _args(configs=["linear_probe"], seeds=[0], ckpt_dir=self._tmp())
+        )
+        self.assertEqual(len(rows), 1)
+        # Without this, run_eval would rebuild a 256-wide trunk and fail
+        # to load a 0-width checkpoint on the head shapes.
+        self.assertEqual(evaluated[0]["hidden_dim"], 0)
+
+    def test_other_configs_pass_the_cli_default(self):
+        _, _, evaluated = _stub_sweep(
+            self, _args(configs=["pmean"], seeds=[0], ckpt_dir=self._tmp())
+        )
+        self.assertEqual(evaluated[0]["hidden_dim"], 256)
 
 
 if __name__ == "__main__":
