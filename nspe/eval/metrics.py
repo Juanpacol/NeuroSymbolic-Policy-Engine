@@ -10,6 +10,8 @@ the ranking the model actually learned.
 
 from __future__ import annotations
 
+from typing import Any
+
 import torch
 from torch import Tensor
 
@@ -188,4 +190,69 @@ def binary_metrics(
         "f1": f1,
         "auroc": auroc(scores, labels),
         "positive_rate": predicted.float().mean().item(),
+    }
+
+
+def calibration_report(
+    scores: Tensor, labels: Tensor, num_bins: int = 15
+) -> dict[str, Any]:
+    """Measures how well predicted probabilities match observed rates.
+
+    Every other metric in this module is threshold- or rank-based, so
+    none of them can see calibration at all. That gap matters here
+    specifically: :class:`~nspe.calibration.VerdictCalibrator` applies a
+    strictly monotone map, which leaves AUROC *mathematically*
+    unchanged -- so AUROC is not, and never was, evidence that the
+    calibrator does anything. ECE and Brier are.
+
+    Args:
+        scores: predicted probabilities in ``[0, 1]``, shape ``(n,)``.
+            Pass calibrated scores; passing a raw fuzzy truth degree
+            measures the absence of calibration, which is a legitimate
+            comparison but a different question.
+        labels: binary ground truth, shape ``(n,)``.
+        num_bins: equal-width bins over ``[0, 1]``.
+
+    Returns:
+        A dict with ``ece`` (count-weighted expected calibration
+        error), ``brier``, ``num_bins``, and ``bins`` -- one row per
+        non-empty bin carrying ``lower``, ``upper``, ``count``,
+        ``mean_score`` and ``empirical_rate``. The rows are returned
+        because they are what a reliability diagram is drawn from, and
+        keeping them costs nothing.
+    """
+    scores = scores.flatten().to(torch.float64)
+    labels = labels.flatten().to(torch.float64)
+    total = scores.numel()
+
+    # A score of exactly 1.0 would otherwise land in a bin that does
+    # not exist.
+    index = (scores * num_bins).long().clamp(0, num_bins - 1)
+    counts = segment_sum(torch.ones_like(scores), index, num_bins)
+    score_sums = segment_sum(scores, index, num_bins)
+    label_sums = segment_sum(labels, index, num_bins)
+
+    occupied = counts > 0
+    # Differences are taken on the sums, so dividing by n once at the
+    # end yields the count-weighted ECE without a per-bin division.
+    ece = (label_sums[occupied] - score_sums[occupied]).abs().sum().item() / total
+
+    bins = []
+    for i in range(num_bins):
+        if counts[i] > 0:
+            bins.append(
+                {
+                    "lower": i / num_bins,
+                    "upper": (i + 1) / num_bins,
+                    "count": int(counts[i].item()),
+                    "mean_score": (score_sums[i] / counts[i]).item(),
+                    "empirical_rate": (label_sums[i] / counts[i]).item(),
+                }
+            )
+
+    return {
+        "ece": ece,
+        "brier": ((scores - labels) ** 2).mean().item(),
+        "num_bins": num_bins,
+        "bins": bins,
     }

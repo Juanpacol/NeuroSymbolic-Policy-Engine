@@ -45,6 +45,10 @@ _AGGREGATED = (
     "reasoner_adjusted_consistency",
     "baseline_adjusted_consistency",
     "reasoner_num_classes",
+    "reasoner_ece",
+    "baseline_ece",
+    "reasoner_brier",
+    "baseline_brier",
 )
 
 
@@ -134,6 +138,13 @@ def _row_from_evaluation(result: dict[str, Any], source: str) -> dict[str, Any]:
         # the fitted operating point. Never emit it unqualified.
         row[f"{arm}_h1_positive_rate"] = h1[arm].get("positive_rate")
         row[f"{arm}_h3_positive_rate"] = h3[arm].get("positive_rate")
+        # Absent from every artifact predating the calibration block;
+        # aggregate() skips None and reports the n it actually used.
+        arm_calibration = result.get("calibration", {}).get(arm, {})
+        calibrated = arm_calibration.get("calibrated", {})
+        row[f"{arm}_ece"] = calibrated.get("ece")
+        row[f"{arm}_brier"] = calibrated.get("brier")
+        row[f"{arm}_ece_reduction"] = arm_calibration.get("ece_reduction")
     return row
 
 

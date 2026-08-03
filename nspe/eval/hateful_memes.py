@@ -12,7 +12,7 @@ from typing import Any
 from torch import Tensor
 
 from nspe.consistency import ConsistencyChecker
-from nspe.eval.metrics import best_threshold, binary_metrics
+from nspe.eval.metrics import best_threshold, binary_metrics, calibration_report
 from nspe.explain import Explanation
 from nspe.reasoner import PolicyKGReasoner, ReasonerOutput
 
@@ -207,3 +207,48 @@ def sample_explanations(
             }
         )
     return results
+
+
+def compute_calibration(
+    reasoner_raw: Tensor,
+    reasoner_calibrated: Tensor,
+    baseline_raw: Tensor,
+    baseline_calibrated: Tensor,
+    labels: Tensor,
+    num_bins: int = 15,
+) -> dict[str, Any]:
+    """Compares each arm's calibration before and after its calibrator.
+
+    :class:`~nspe.calibration.VerdictCalibrator` is strictly monotone,
+    so it cannot change AUROC -- which means none of the H3 metrics can
+    tell whether it helps. This is the measurement that can. Reporting
+    both arms pre and post also shows whether the raw fuzzy verdict was
+    the badly-scaled quantity the calibrator was introduced to fix.
+
+    Args:
+        reasoner_raw: reasoner truth degrees before calibration.
+        reasoner_calibrated: the same verdicts after calibration.
+        baseline_raw: baseline verdicts before calibration.
+        baseline_calibrated: the same verdicts after calibration.
+        labels: ground-truth binary labels.
+        num_bins: bins passed to
+            :func:`~nspe.eval.metrics.calibration_report`.
+
+    Returns:
+        A dict with ``num_bins`` and, per arm, ``uncalibrated`` and
+        ``calibrated`` reports plus an ``ece_reduction`` (positive when
+        calibration helped).
+    """
+    report = {"num_bins": num_bins}
+    for arm, raw, calibrated in (
+        ("reasoner", reasoner_raw, reasoner_calibrated),
+        ("baseline", baseline_raw, baseline_calibrated),
+    ):
+        before = calibration_report(raw, labels, num_bins)
+        after = calibration_report(calibrated, labels, num_bins)
+        report[arm] = {
+            "uncalibrated": before,
+            "calibrated": after,
+            "ece_reduction": before["ece"] - after["ece"],
+        }
+    return report

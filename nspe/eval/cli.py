@@ -30,7 +30,12 @@ from nspe.baselines.neural_classifier import NeuralBaselineClassifier
 from nspe.calibration import VerdictCalibrator
 from nspe.engine import PolicyEngine
 from nspe.eval.diagnostics import predicate_stats, signature_distribution
-from nspe.eval.hateful_memes import compute_h1, compute_h3, sample_explanations
+from nspe.eval.hateful_memes import (
+    compute_calibration,
+    compute_h1,
+    compute_h3,
+    sample_explanations,
+)
 from nspe.extractor import NeuroSymbolicLayer
 from nspe.policy.loader import load_policy
 from nspe.reasoner import PolicyKGReasoner
@@ -197,28 +202,50 @@ def run_eval(
         )
         num_examples = len(dataset)
 
-    all_mu0, all_reasoner_verdict, all_baseline_verdict, all_labels = [], [], [], []
+    all_mu0, all_reasoner_verdict, all_labels = [], [], []
+    all_reasoner_raw, all_baseline_raw = [], []
+    # Collect the baseline's pre-calibration verdict by switching its
+    # calibrator off for the pass, then applying it once afterwards --
+    # the map is elementwise with no batch state, so that is exactly
+    # equivalent and avoids a second forward pass.
+    if baseline.calibrator is not None:
+        baseline.calibrator.enabled = False
+
     for inputs, texts, labels in loader:
         inputs = inputs.to(device)
         fused = inputs if cache_dir is not None else extractor.encode(inputs, texts)
         mu0 = extractor.forward_embedded(fused)
         reasoner_out = engine.reasoner(mu0)
-        verdict = reasoner_out.verdicts[_VERDICT_NAME]
+        raw_verdict = reasoner_out.verdicts[_VERDICT_NAME]
+        verdict = raw_verdict
         if engine.calibrator is not None:
             verdict = engine.calibrator(verdict)
 
         all_mu0.append(mu0.cpu())
+        all_reasoner_raw.append(raw_verdict.cpu())
         all_reasoner_verdict.append(verdict.cpu())
-        all_baseline_verdict.append(baseline.forward_embedded(fused).cpu())
+        all_baseline_raw.append(baseline.forward_embedded(fused).cpu())
         all_labels.append(labels)
 
     mu0 = torch.cat(all_mu0)
+    reasoner_raw = torch.cat(all_reasoner_raw)
     reasoner_verdict = torch.cat(all_reasoner_verdict)
-    baseline_verdict = torch.cat(all_baseline_verdict)
+    baseline_raw = torch.cat(all_baseline_raw)
     labels = torch.cat(all_labels)
 
+    if baseline.calibrator is not None:
+        baseline.calibrator.enabled = True
+        baseline_verdict = baseline.calibrator(baseline_raw.to(device)).cpu()
+    else:
+        baseline_verdict = baseline_raw
+
+    # h1/h3 keep consuming the calibrated verdicts; feeding them the raw
+    # ones would move every already-published number.
     h1 = compute_h1(mu0, reasoner_verdict, baseline_verdict)
     h3 = compute_h3(reasoner_verdict, baseline_verdict, labels, threshold=threshold)
+    calibration = compute_calibration(
+        reasoner_raw, reasoner_verdict, baseline_raw, baseline_verdict, labels
+    )
 
     predicate_names = policy.predicate_names("base")
     h1["predicate_stats"] = predicate_stats(mu0, predicate_names)
@@ -252,6 +279,11 @@ def run_eval(
         },
         "h1_consistency": h1,
         "h3_explainability": h3,
+        # Top-level rather than nested inside h3: nspe/eval/aggregate.py
+        # detects artifact shape by the presence of "h3_explainability"
+        # and reads its arms positionally, so a new sub-block there
+        # would risk colliding with that.
+        "calibration": calibration,
     }
 
 
