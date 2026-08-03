@@ -17,6 +17,7 @@ from nspe.eval.aggregate import (
     group_key,
     load_results,
     normalize_row,
+    policy_family,
 )
 from nspe.eval.metrics import mean_std
 
@@ -176,6 +177,35 @@ class TestGrouping(TestCase):
         row = normalize_row(_evaluation(), "results_s0.json")[0]
         self.assertEqual(row["policy_name"], "unknown")
         self.assertEqual(len(group_key(row)), 3)
+
+    def test_scrambled_seeds_pool_with_each_other(self):
+        """Ten scramble seeds are ten repeats of one control, not ten configs.
+
+        Without this, each `_scrambled_s{seed}` name forms its own
+        group of n=1 -- too small to summarize, and never matching the
+        n=10 the intact result reports.
+        """
+        seed0 = _evaluation()
+        seed0["policy_name"] = "hateful_memes_policy_scrambled_s0"
+        seed7 = _evaluation()
+        seed7["policy_name"] = "hateful_memes_policy_scrambled_s7"
+
+        self.assertEqual(
+            group_key(normalize_row(seed0, "results_scram_test_s0.json")[0]),
+            group_key(normalize_row(seed7, "results_scram_test_s7.json")[0]),
+        )
+
+    def test_policy_family_only_strips_a_trailing_scramble_seed(self):
+        self.assertEqual(
+            policy_family("hateful_memes_policy_scrambled_s3"),
+            "hateful_memes_policy_scrambled",
+        )
+        # Not a scramble suffix: left alone, so two genuinely different
+        # policies still never pool.
+        self.assertEqual(policy_family("hateful_memes_policy"), "hateful_memes_policy")
+        self.assertEqual(
+            policy_family("meta_community_standards"), "meta_community_standards"
+        )
 
 
 class TestAggregate(TestCase):

@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import glob
 import json
+import re
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any, cast
@@ -196,16 +197,41 @@ def aggregate(rows: list[dict[str, Any]]) -> dict[str, tuple[float, float, int]]
     return summary
 
 
+_SCRAMBLED_SEED = re.compile(r"_scrambled_s\d+$")
+
+
+def policy_family(policy_name: str) -> str:
+    """Strips a scramble seed suffix, so per-seed control runs pool.
+
+    :func:`~nspe.policy.scramble.scramble_policy` names each output
+    ``{base}_scrambled_s{seed}`` -- ten distinct names for what is, for
+    aggregation purposes, ten repeats of one intervention (the
+    derangement) rather than ten configurations to report separately.
+    Grouping on the raw name would silently split the control into ten
+    groups of n=1, each too small to summarize and none matching the
+    ``n=10`` the intact result reports.
+
+    Args:
+        policy_name: a policy's recorded name.
+
+    Returns:
+        ``policy_name`` with any trailing ``_scrambled_s<seed>`` removed.
+    """
+    return _SCRAMBLED_SEED.sub("_scrambled", policy_name)
+
+
 def group_key(row: dict[str, Any]) -> tuple[str, str, str]:
-    """Returns the ``(split, backbone, policy)`` a row belongs to.
+    """Returns the ``(split, backbone, policy family)`` a row belongs to.
 
     Every component earns its place by preventing a specific silent
     averaging error: split keeps validation and test apart, backbone
-    keeps ViT-L-14 and ViT-B-32 apart, and policy keeps a control run
-    (a scrambled policy) from being averaged into the intact result it
-    is supposed to be compared against.
+    keeps ViT-L-14 and ViT-B-32 apart, and policy family keeps a
+    control run (a scrambled policy) from being averaged into the
+    intact result it is supposed to be compared against, while still
+    pooling the ten scrambled seeds with each other via
+    :func:`policy_family`.
     """
-    return (row["split"], row["clip_model"], row["policy_name"])
+    return (row["split"], row["clip_model"], policy_family(row["policy_name"]))
 
 
 def _format(value: float | None, places: int = 4) -> str:
