@@ -145,7 +145,7 @@ belonging to weights that no longer exist. `--thresholds-from` enforces
 the pairing, and the eval CLI refuses `--split test` without it.
 
 ```python
-for seed in range(5):
+for seed in range(10):
     !{sys.executable} -m nspe.train.cli --model reasoner \
       --clip-model ViT-L-14 --clip-pretrained openai \
       --cache-dir /kaggle/working/emb_cache --seed {seed} --epochs 30 \
@@ -173,8 +173,14 @@ for seed in range(5):
       --out /kaggle/working/results_test_s{seed}.json
 ```
 
+Ten seeds, not five: the exact sign-permutation test used for
+significance has a floor of p=0.0625 two-sided at n=5, so no result at
+five seeds can reach p<0.05 however large the effect. At n=10 the floor
+drops to 0.002. Cell 10 depends on the baselines this loop leaves
+behind, so run it over the full `range(10)`.
+
 The first `--split test` triggers a one-time CLIP encode of the test
-split, shared by all five seeds. **Check the printed `num_examples`
+split, shared by every seed. **Check the printed `num_examples`
 before trusting anything**: expect roughly 2400 of 3000 rows after the
 image-availability filter (validation goes 1040 → 831, about 80%). A
 number near 3000 means the filter changed; a much smaller one means
@@ -193,7 +199,75 @@ rerun reproduces the published validation numbers within seed noise,
 which is the only evidence that the test table and the original
 validation table describe the same system.
 
-### Cell 10 — download checkpoints and results
+### Cell 10 — the scrambled-policy control
+
+**Prerequisite: cell 9 must have run in this session, with
+`range(10)`.** Ten seeds rather than five is not a preference: the
+exact sign-permutation test's floor is p=0.0625 two-sided at n=5, so
+p<0.05 is *mathematically unreachable* there. At n=10 the floor is
+0.002.
+
+This control asks whether the reasoner's advantage comes from the rules
+or merely from having a fixed nonlinear aggregator. See the
+pre-registered prediction in `docs/h1_h3_findings.md` — read it before
+looking at the output.
+
+The reasoner arm is retrained per scrambled policy; the baseline is
+**not**, and that is deliberate. It consumes the policy solely for
+`num_predicates`, which the scramble leaves at 6, so it is genuinely
+invariant and the intact `baseline_s{seed}.pt` is the correct
+comparison. That halves the cost.
+
+```python
+POL = "/kaggle/working/nspe-repo/docs/results/h1_h3/policies_scrambled"
+
+for seed in range(10):
+    policy = f"{POL}/hateful_memes_scrambled_s{seed}.yaml"
+
+    # --policy must reach training and BOTH evals. Omitting it anywhere
+    # silently evaluates a model under a wiring it was not trained on.
+    !{sys.executable} -m nspe.train.cli --model reasoner --policy {policy} \
+      --clip-model ViT-L-14 --clip-pretrained openai \
+      --cache-dir /kaggle/working/emb_cache --seed {seed} --epochs 30 \
+      --out /kaggle/working/checkpoints/reasoner_scram_s{seed}.pt
+
+    !{sys.executable} -m nspe.eval.cli --policy {policy} \
+      --clip-model ViT-L-14 --cache-dir /kaggle/working/emb_cache \
+      --reasoner-checkpoint /kaggle/working/checkpoints/reasoner_scram_s{seed}.pt \
+      --baseline-checkpoint /kaggle/working/checkpoints/baseline_s{seed}.pt \
+      --split validation --device cuda \
+      --out /kaggle/working/results_scram_val_s{seed}.json
+
+    # --thresholds-from must point at this run's OWN validation file.
+    !{sys.executable} -m nspe.eval.cli --policy {policy} \
+      --clip-model ViT-L-14 --cache-dir /kaggle/working/emb_cache \
+      --reasoner-checkpoint /kaggle/working/checkpoints/reasoner_scram_s{seed}.pt \
+      --baseline-checkpoint /kaggle/working/checkpoints/baseline_s{seed}.pt \
+      --split test --device cuda \
+      --thresholds-from /kaggle/working/results_scram_val_s{seed}.json \
+      --out /kaggle/working/results_scram_test_s{seed}.json
+```
+
+The embedding cache is keyed by `(split, model_name, pretrained)` and
+is independent of the policy, so nothing is re-encoded here.
+
+`resolve_thresholds` only **warns** on a policy-fingerprint mismatch
+rather than failing — watch the output for it. A warning here means a
+`--policy` flag was dropped somewhere above, and the run is worthless.
+
+Then check the grouping:
+
+```python
+!{sys.executable} -m nspe.eval.aggregate '/kaggle/working/results_*s*.json'
+```
+
+This must print **four** groups: validation and test, each intact and
+scrambled. Fewer means a control run is being averaged into the main
+result, which corrupts the headline number rather than merely losing
+the control — stop and check `policy_name` in the artifacts before
+reading anything else.
+
+### Cell 11 — download checkpoints and results
 
 ```python
 import shutil
@@ -225,5 +299,11 @@ Then download via the notebook's Output tab (Kaggle) or `files.download(...)` (C
   otherwise report AUROC 0.5 and an `auroc_gap` of exactly 0.0, which
   reads as a real null result. See `docs/h1_h3_findings.md`.
 - `python -m nspe.eval.aggregate '<glob>'` derives the mean±std tables
-  from result JSONs, grouping by split and backbone so validation and
-  test never average together.
+  from result JSONs, grouping by split, backbone **and policy** so
+  validation never averages with test, ViT-L-14 never with ViT-B-32,
+  and a scrambled control run never with the intact result it exists to
+  be compared against.
+- Be precise with that glob. Artifacts from separate sessions of the
+  *same* configuration (`results_s*.json` and `results_val_s*.json`,
+  say) pool into one group with seeds counted twice, which quietly
+  inflates `n` and therefore any p-value computed from it.
