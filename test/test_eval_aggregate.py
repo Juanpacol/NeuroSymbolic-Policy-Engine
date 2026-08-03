@@ -153,6 +153,30 @@ class TestGrouping(TestCase):
         b32 = normalize_row(_evaluation(), "results_b32_s0.json")[0]
         self.assertNotEqual(group_key(l14), group_key(b32))
 
+    def test_policies_never_mix(self):
+        """The guard that keeps a control out of the result it controls.
+
+        A scrambled-policy run shares its split and backbone with the
+        intact run. Without policy in the key the two would be averaged
+        into a single meaningless mean, silently and with no error.
+        """
+        intact = _evaluation()
+        intact["policy_name"] = "hateful_memes_policy"
+        scrambled = _evaluation()
+        scrambled["policy_name"] = "hateful_memes_policy_scrambled_s0"
+
+        self.assertNotEqual(
+            group_key(normalize_row(intact, "results_test_s0.json")[0]),
+            group_key(normalize_row(scrambled, "results_scram_test_s0.json")[0]),
+        )
+
+    def test_missing_policy_name_does_not_crash(self):
+        # The twenty already-committed artifacts predate nothing here,
+        # but an artifact from another tool might omit it.
+        row = normalize_row(_evaluation(), "results_s0.json")[0]
+        self.assertEqual(row["policy_name"], "unknown")
+        self.assertEqual(len(group_key(row)), 3)
+
 
 class TestAggregate(TestCase):
     def test_skips_missing_values_and_reports_the_count(self):

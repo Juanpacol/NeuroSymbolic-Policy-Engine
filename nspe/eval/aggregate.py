@@ -24,8 +24,14 @@ from pathlib import Path
 from typing import Any
 
 from nspe.eval.metrics import mean_std
+from nspe.eval.significance import sign_permutation_test
 
 _ARMS = ("reasoner", "baseline")
+
+# Gap fields carrying a paired per-seed difference, so an exact sign
+# test is meaningful on them.
+_PAIRED_FIELDS = ("auroc_gap", "accuracy_gap", "f1_gap")
+_MAX_TESTABLE_N = 20
 
 # Fields averaged across runs within a group. Anything absent from a
 # given artifact shape is skipped rather than defaulted -- see
@@ -111,9 +117,11 @@ def _row_from_evaluation(result: dict[str, Any], source: str) -> dict[str, Any]:
         "split": result.get("dataset", {}).get("split", "unknown"),
         "num_examples": result.get("dataset", {}).get("num_examples"),
         "clip_model": _backbone(result, source),
+        "policy_name": result.get("policy_name", "unknown"),
         "threshold_source": h3.get("threshold_source"),
         "auroc_gap": h3.get("auroc_gap"),
         "accuracy_gap": h3.get("accuracy_gap"),
+        "f1_gap": h3.get("f1_gap"),
         "majority_class_accuracy": h3.get("majority_class_accuracy"),
     }
     for arm in _ARMS:
@@ -137,6 +145,7 @@ def _row_from_ablation(
         "split": "validation",
         "num_examples": None,
         "clip_model": _backbone(result, source),
+        "policy_name": result.get("policy_name", "unknown"),
         "config": entry["config"]["name"],
         "seed": entry.get("seed"),
         "auroc_gap": entry.get("auroc_gap"),
@@ -176,14 +185,16 @@ def aggregate(rows: list[dict[str, Any]]) -> dict[str, tuple[float, float, int]]
     return summary
 
 
-def group_key(row: dict[str, Any]) -> tuple[str, str]:
-    """Returns the ``(split, backbone)`` a row belongs to.
+def group_key(row: dict[str, Any]) -> tuple[str, str, str]:
+    """Returns the ``(split, backbone, policy)`` a row belongs to.
 
-    Grouping on both is what stops a validation run and a test run
-    sitting in the same directory from being averaged into one
-    meaningless number.
+    Every component earns its place by preventing a specific silent
+    averaging error: split keeps validation and test apart, backbone
+    keeps ViT-L-14 and ViT-B-32 apart, and policy keeps a control run
+    (a scrambled policy) from being averaged into the intact result it
+    is supposed to be compared against.
     """
-    return (row["split"], row["clip_model"])
+    return (row["split"], row["clip_model"], row["policy_name"])
 
 
 def _format(value: float | None, places: int = 4) -> str:
@@ -203,16 +214,45 @@ def print_markdown(rows: list[dict[str, Any]]) -> None:
             f"| {_format(row.get('auroc_gap'))} |"
         )
 
-    groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    groups: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
     for row in rows:
         groups.setdefault(group_key(row), []).append(row)
 
-    for (split, backbone), group in sorted(groups.items()):
-        print(f"\n### {split} / {backbone}  ({len(group)} runs)")
+    for (split, backbone, policy), group in sorted(groups.items()):
+        print(f"\n### {split} / {backbone} / {policy}  ({len(group)} runs)")
         print("\n| metric | mean | std | n |")
         print("|---|---|---|---|")
         for field, (mean, std, count) in aggregate(group).items():
             print(f"| {field} | {mean:.4f} | {std:.4f} | {count} |")
+        _print_significance(group)
+
+
+def _print_significance(group: list[dict[str, Any]]) -> None:
+    """Prints an exact paired test per gap field, with its floor."""
+    tested = [
+        (field, [r[field] for r in group if r.get(field) is not None])
+        for field in _PAIRED_FIELDS
+    ]
+    tested = [(f, g) for f, g in tested if 3 <= len(g) <= _MAX_TESTABLE_N]
+    if not tested:
+        return
+
+    print("\n| paired field | mean gap | positive | p (two-sided) | floor |")
+    print("|---|---|---|---|---|")
+    for field, gaps in tested:
+        result = sign_permutation_test(gaps)
+        print(
+            f"| {field} | {result['mean_gap']:+.4f} "
+            f"| {result['num_positive']}/{result['n']} "
+            f"| {result['p_value']:.4f} | {result['min_achievable_p']:.4f} |"
+        )
+    print(
+        "\nThe null is that the per-seed gap distribution is symmetric "
+        "about zero, over *retrains on fixed data* -- evidence about "
+        "reliability across seeds, not about generalization. A p equal "
+        "to the floor means the design was saturated, not that the "
+        "effect was marginal."
+    )
 
 
 def main() -> None:
