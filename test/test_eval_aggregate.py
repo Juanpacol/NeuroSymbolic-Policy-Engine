@@ -237,8 +237,12 @@ class TestPublishedFigures(TestCase):
         if not Path(_COMMITTED).is_dir():
             self.skipTest("committed artifacts not present")
 
+        # results_s[0-9].json, not results_s*.json: the wildcard form
+        # also matches results_scram_test_s0.json ("results_s" + "cram_
+        # test_s0" + ".json"), which inflates n from 5 to 25 now that
+        # scrambled-control artifacts share the directory.
         rows = []
-        for source, result in load_results([f"{_COMMITTED}/results_s*.json"]):
+        for source, result in load_results([f"{_COMMITTED}/results_s[0-9].json"]):
             rows.extend(normalize_row(result, source))
         self.assertEqual(len(rows), 5)
 

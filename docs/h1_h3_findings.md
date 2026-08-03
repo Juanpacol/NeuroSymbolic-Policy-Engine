@@ -1,6 +1,7 @@
 # H1/H3 remediation: root causes, fixes, and first real results
 
-Snapshot as of commit `464a372`. Read this before touching
+Snapshot as of the 10-seed held-out test run and scrambled-policy
+control. Read this before touching
 `nspe/train/`, `nspe/eval/`, `nspe/consistency.py`, `nspe/extractor.py`,
 or `nspe/ablate/` -- it explains *why* those modules look the way they
 do, which their docstrings only partially cover.
@@ -237,26 +238,29 @@ vs. 0-4 there) and a smaller n, so the two AUROC figures (0.7181 here,
 0.7193 in the 5-seed table) agreeing closely is a mild positive check,
 not independent confirmation.
 
-## Held-out test split (5 seeds, ViT-L-14)
+## Held-out test split (10 seeds, ViT-L-14)
 
-Ran via `docs/colab_h1_h3.md` Cell 9 on Kaggle T4, commit `464a372`.
-Checkpoints are gitignored, so this is a **full retrain**, not a
-re-evaluation of the weights behind the validation section above:
-5 seeds x 2 arms trained fresh, validation re-evaluated in the same
-session to fit each arm's threshold, then test evaluated once with
-`--thresholds-from` pointing at that fresh validation run. Artifacts:
-`docs/results/h1_h3/results_val_s{0..4}.json` (the paired rerun) and
-`results_test_s{0..4}.json`.
+Ran via `docs/colab_h1_h3.md` Cell 9 on Kaggle T4 (superseding the
+5-seed version of this section). Checkpoints are gitignored, so this is
+a **full retrain**, not a re-evaluation of the weights behind the
+validation section above: 10 seeds x 2 arms trained fresh, validation
+re-evaluated in the same session to fit each arm's threshold, then test
+evaluated once with `--thresholds-from` pointing at that fresh
+validation run. Artifacts: `docs/results/h1_h3/results_val_s{0..9}.json`
+(the paired rerun) and `results_test_s{0..9}.json`.
+
+Ten seeds rather than five specifically so significance is reachable --
+see **Significance**, below.
 
 | | validation (this rerun) | **test (held out)** |
 |---|---|---|
-| reasoner AUROC | 0.7193 ± 0.0060 | **0.7551 ± 0.0043** |
-| baseline AUROC | 0.6866 ± 0.0096 | **0.7266 ± 0.0048** |
-| auroc_gap | 0.0327 ± 0.0143 | 0.0284 ± 0.0055 |
-| reasoner accuracy | 0.6253 ± 0.0170 | 0.6334 ± 0.0230 |
-| baseline accuracy | 0.5853 ± 0.0239 | 0.5841 ± 0.0214 |
-| reasoner adjusted_consistency | 0.6703 ± 0.1504 | **0.7001 ± 0.0793** |
-| baseline adjusted_consistency | 0.2998 ± 0.1025 | 0.3437 ± 0.0850 |
+| reasoner AUROC | 0.7194 ± 0.0058 | **0.7574 ± 0.0049** |
+| baseline AUROC | 0.6860 ± 0.0073 | **0.7265 ± 0.0061** |
+| auroc_gap | 0.0334 ± 0.0114 | 0.0309 ± 0.0089 |
+| reasoner accuracy | 0.6168 ± 0.0298 | 0.6216 ± 0.0360 |
+| baseline accuracy | 0.5846 ± 0.0182 | 0.5880 ± 0.0173 |
+| reasoner adjusted_consistency | 0.6769 ± 0.1217 | **0.7043 ± 0.0641** |
+| baseline adjusted_consistency | 0.3096 ± 0.1033 | 0.3567 ± 0.0869 |
 | majority-class accuracy | 0.5680 | 0.5876 |
 | num_examples | 831 | 2408 (of 3000, after the image-availability filter) |
 
@@ -268,19 +272,152 @@ one describe the same system.
 
 **H3 holds on held-out data, with a wider margin than validation
 suggested.** Both arms' AUROC rise on test relative to validation
-(reasoner 0.719 -> 0.755, baseline 0.687 -> 0.727) and the gap stays
-positive in **all 5 seeds without exception**
-(`[0.0241, 0.0215, 0.0368, 0.0319, 0.0280]`). The larger test set
-(2408 vs. 831 cases) also tightens every standard deviation -- AUROC
-std drops from 0.0060 to 0.0043 for the reasoner, consistency std from
-0.150 to 0.079 -- consistent with the validation-stage numbers being
-noisier estimates of the same effect rather than a different one.
+(reasoner 0.719 -> 0.757, baseline 0.686 -> 0.727) and the gap stays
+positive in **all 10 seeds without exception**
+(`[0.0241, 0.0215, 0.0368, 0.0319, 0.0280, 0.0435, 0.0312, 0.0140,
+0.0352, 0.0430]`). The larger test set (2408 vs. 831 cases) also
+tightens every standard deviation -- AUROC std drops from 0.0058 to
+0.0049 for the reasoner, consistency std from 0.122 to 0.064 --
+consistent with the validation-stage numbers being noisier estimates of
+the same effect rather than a different one.
 
-**H1 also holds, and also tightens.** Per-seed reasoner
-`adjusted_consistency`: `[0.7312, 0.6335, 0.7034, 0.6032, 0.8291]`,
-beating the baseline's `[0.4151, 0.3224, 0.4601, 0.2999, 0.2208]` in
-every seed. No arm is `degenerate` in any of the 10 (5 seeds x 2 arms)
-test runs.
+**H1 also holds.** Reasoner `adjusted_consistency` beats the baseline's
+on both splits, on average by more than double (test: 0.704 vs. 0.357).
+No arm is `degenerate` in any of the 20 (10 seeds x 2 arms) test runs.
+
+## Significance (10 seeds, exact sign-permutation test)
+
+Computed by `nspe.eval.significance.sign_permutation_test`, wired into
+`nspe.eval.aggregate`'s per-group tables. At n=10 the floor is
+`2/2**10 = 0.0020` two-sided -- reachable, unlike the n=5 floor of
+0.0625 that made this section impossible to write honestly before this
+run.
+
+| split | field | mean gap | positive seeds | p (two-sided) |
+|---|---|---|---|---|
+| validation | auroc_gap | +0.0334 | 10/10 | **0.0020** (floor) |
+| validation | accuracy_gap | +0.0323 | 8/10 | 0.0273 |
+| validation | f1_gap | +0.0147 | 10/10 | **0.0020** (floor) |
+| test | auroc_gap | +0.0309 | 10/10 | **0.0020** (floor) |
+| test | accuracy_gap | +0.0335 | 7/10 | 0.0547 |
+| test | f1_gap | +0.0186 | 8/10 | 0.0117 |
+
+**AUROC and F1 are reliable; accuracy is not**, on both splits -- the
+same pattern the 5-seed/two-backbone section above already flagged
+(`accuracy_gap` sign-flips seed to seed) now has a p-value attached:
+accuracy_gap is the one field that does not clear p<0.05 on test. Lead
+with `auroc_gap`, not `accuracy_gap`, as this project's headline number.
+
+**What this licenses, precisely.** The null rejected is that the
+per-seed AUROC/F1 gap is symmetric about zero, where the unit of
+observation is *a retrain of both arms on the same fixed dataset*. This
+is evidence the reasoner reliably beats the baseline across random
+initializations. It is **not** evidence the reasoner generalizes
+better to new data -- that would require independent data samples, not
+independent seeds.
+
+## Calibration (10 seeds, ECE + Brier)
+
+`VerdictCalibrator` is strictly monotone by construction, so it cannot
+change AUROC -- meaning **none of the numbers above can tell whether it
+does anything**. This is the measurement that can: raw and calibrated
+verdicts recorded during the same run, `calibration_report` computed on
+both (`nspe/eval/metrics.py`, 15 bins).
+
+| | ECE, pre-calibration | ECE, post-calibration | Brier, pre | Brier, post |
+|---|---|---|---|---|
+| reasoner (val) | 0.1722 ± 0.0424 | 0.1534 ± 0.0154 | 0.2457 ± 0.0163 | 0.2347 ± 0.0061 |
+| baseline (val) | 0.1366 ± 0.0466 | 0.1526 ± 0.0180 | 0.2448 ± 0.0157 | 0.2447 ± 0.0066 |
+| reasoner (test) | 0.1438 ± 0.0383 | 0.1289 ± 0.0147 | 0.2216 ± 0.0127 | 0.2155 ± 0.0063 |
+| baseline (test) | 0.1261 ± 0.0620 | 0.1150 ± 0.0182 | 0.2298 ± 0.0179 | 0.2234 ± 0.0050 |
+
+**The calibrator does something, but modestly and not uniformly.** It
+lowers the reasoner's ECE on both splits (val: -0.019, test: -0.015)
+and the baseline's on test (-0.011), but very slightly *raises* the
+baseline's on validation (+0.016) -- and every one of those deltas is
+smaller than its own across-seed standard deviation, so none should be
+read as a clean, seed-independent effect. The honest summary is: the
+raw fuzzy verdict was in fact the badly-scaled quantity
+`nspe/calibration.py`'s module docstring says it was introduced to fix
+(both arms start around ECE 0.13-0.17, well above 0), the calibrator
+narrows that somewhat for the reasoner specifically, and AUROC alone
+would have reported none of this, because it cannot -- confirming the
+module docstring's own claim that AUROC-invariance means AUROC was
+never evidence the calibrator worked.
+
+## Scrambled-policy control: results
+
+**Resolves the pre-registration below. Read that section first for the
+predictions being tested here.**
+
+Ran via `docs/colab_h1_h3.md` Cell 10, same session as the 10-seed
+result above. Reasoner retrained per scrambled policy (seeds 0-9);
+baseline reused from the intact run, since it consumes the policy only
+for `num_predicates` (unchanged at 6 under any derangement). Artifacts:
+`docs/results/h1_h3/results_scram_{val,test}_s{0..9}.json`.
+
+| | intact | scrambled | gap (intact - scrambled) | p, one-sided (n=10) |
+|---|---|---|---|---|
+| reasoner AUROC (val) | 0.7194 | 0.7188 | +0.0006 | 0.3965 |
+| reasoner AUROC (test) | 0.7574 | 0.7540 | +0.0034 | 0.1553 |
+| reasoner adjusted_consistency (val) | 0.6769 | 0.5615 | +0.1154 | 0.1680 (two-sided) |
+| reasoner adjusted_consistency (test) | 0.7043 | 0.6358 | +0.0685 | 0.2324 (two-sided) |
+
+Per-seed AUROC gaps (intact - scrambled), paired by seed:
+
+- validation: `[0.0038, 0.0047, -0.0046, 0.0111, -0.0061, -0.0043,
+  0.0068, -0.0090, 0.0117, -0.0074]` -- positive in 5/10.
+- test: `[0.0015, -0.0006, 0.0031, 0.0227, -0.0126, 0.0062, 0.0078,
+  -0.0087, 0.0094, 0.0053]` -- positive in 7/10.
+
+**Prediction 1 (intact AUROC > scrambled, one-sided) does not hold.**
+The mean gap is close to zero on both splits, the sign flips seed to
+seed, and p is nowhere near significant (0.40 validation, 0.16 test --
+neither approaches the two-sided floor of 0.002 this design could
+reach, let alone the more lenient one-sided threshold). Scrambling
+which base predicate each rule reads produces a model statistically
+indistinguishable, on AUROC, from the intact policy.
+
+**Prediction 2 (adjusted_consistency roughly unchanged) also misses,
+though less cleanly.** Consistency drops under scrambling by a
+non-trivial margin on both splits (-17% relative on validation, -10% on
+test), larger than the "roughly unchanged" the prediction called for --
+but the drop is not statistically significant either (p=0.17-0.23,
+two-sided), so this reads as a real but noisy trend rather than a
+clean second result.
+
+**Prediction 3 (scrambled still above chance) holds without
+qualification** -- 0.754 test AUROC is far above the 0.5 baseline and
+above the 0.588 majority-class accuracy.
+
+### This is the falsifying outcome, and it was named in advance
+
+The pre-registration below states explicitly: *"If scrambled AUROC is
+statistically indistinguishable from intact, the policy contributes
+nothing measurable and H3's framing does not survive."* That is what
+happened. The committed response, also written in advance, is the
+restatement this section now makes official: **this project's accuracy
+result is that a fixed nonlinear aggregator over a shared predicate
+trunk beats a learned linear one at matched capacity** -- H3's
+explainability and consistency claims (the audit trail itself, and the
+reasoner's H1 advantage, which the scramble does not touch since it
+never alters the rule graph) stand as measured. What does not survive
+is the stronger claim that *which* rules are wired in, specifically,
+is what drives the accuracy gap. On this dataset and this policy, it is
+not; the gap looks like it comes from having a fixed, capacity-matched
+nonlinear circuit at all, not from that circuit encoding the right
+domain knowledge.
+
+This does not weaken H1 or H2. H1 is about verdict consistency across
+equivalent cases, a structural property of the rule *graph*, which
+scrambling does not alter (see the pre-registration's safety argument).
+H2 is about latency against Clingo, orthogonal to this control
+entirely. It narrows H3 specifically, from "the policy's domain
+knowledge drives the accuracy gap" to "a fixed nonlinear aggregator
+drives the accuracy gap, with the policy supplying the auditable
+structure and the consistency guarantee on top." That is a smaller
+claim than the one this project set out to test, and this document says
+so rather than reframing around it after the fact.
 
 ### Test-set protocol
 
@@ -363,6 +500,19 @@ down here so it cannot be rationalized away afterwards.
 
 ## What's still open
 
+- **Why scrambling doesn't hurt accuracy is itself now an open
+  question.** The control's negative result (above) says the wiring
+  isn't what's carrying AUROC, but not *why not* -- candidates worth a
+  sentence each in the paper's discussion: the base predicates may be
+  correlated enough with each other and with the label that most
+  derangements land on comparably-informative combinations; the rule
+  confidences and t-conorm aggregation may dominate over which specific
+  predicate sits in which slot; or six predicates may simply be too few
+  for a random derangement to land on a genuinely uninformative wiring
+  most of the time. Distinguishing these would need either a
+  larger/more heterogeneous predicate set or a targeted adversarial
+  scramble (worst-case derangement, not a random one), neither
+  attempted here.
 - **A controlled test of the backbone-dependence hypothesis** for H1
   (ViT-L-14 vs. ViT-B-32 findings above), if it's worth pursuing further
   than the observational finding already recorded.
