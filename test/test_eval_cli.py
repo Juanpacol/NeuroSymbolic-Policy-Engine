@@ -110,8 +110,10 @@ class TestResolveThresholds(TestCase):
 
 
 class TestSpreadSample(TestCase):
-    """The dataset's rows are label-sorted, so head-of-list sampling
-    draws every published explanation from one class.
+    """Published explanations must not all come from one class.
+
+    The dataset's rows are label-sorted, so head-of-list sampling drew
+    every explanation from the same label.
     """
 
     def test_spreads_across_the_range_instead_of_taking_the_head(self):

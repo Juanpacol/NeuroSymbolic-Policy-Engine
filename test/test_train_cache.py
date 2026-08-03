@@ -126,9 +126,11 @@ class TestCacheKey(TestCase):
 
 
 class TestSingleClassSubsetGuard(TestCase):
-    """The mirror orders rows by label, so a head-of-split subset is
-    single-class -- and on validation that silently breaks checkpoint
-    selection, since AUROC is 0.5 at every epoch.
+    """A truncated split must be rejected rather than silently useless.
+
+    The mirror orders rows by label, so a head-of-split subset is
+    single-class -- and on validation that breaks checkpoint selection,
+    since AUROC is then 0.5 at every epoch.
     """
 
     def test_rejects_a_single_class_truncation(self):

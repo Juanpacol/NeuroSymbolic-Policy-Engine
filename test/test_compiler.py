@@ -109,7 +109,12 @@ class TestCompileSimplePolicy(TestCase):
                 # textbook cycle -- covered by test_cyclic_dependency_rejected
                 # and test_same_stratum... left as a placeholder for the
                 # explicit stratum-order check exercised above.
-                Rule(id="R2", head="v", body=(Literal("mid"),), unless=(Literal("mid"),)),
+                Rule(
+                    id="R2",
+                    head="v",
+                    body=(Literal("mid"),),
+                    unless=(Literal("mid"),),
+                ),
             ),
         )
         # v negates mid at stratum 0->1 relation: mid stratum(0 rel to a)

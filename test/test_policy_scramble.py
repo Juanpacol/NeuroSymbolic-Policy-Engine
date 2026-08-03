@@ -15,8 +15,8 @@ from torch.testing._internal.common_utils import TestCase, run_tests
 
 from nspe.policy.compiler import compile_policy
 from nspe.policy.loader import dump_policy, load_policy, policy_to_dict
-from nspe.policy.scramble import base_derangement, scramble_policy
 from nspe.policy.schema import Literal, Policy, Predicate, Rule
+from nspe.policy.scramble import base_derangement, scramble_policy
 
 _POLICY = "nspe/policies/hateful_memes.yaml"
 _SEEDS = range(50)

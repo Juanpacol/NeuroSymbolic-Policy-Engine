@@ -7,7 +7,6 @@ actually computes the same thing, and that arm's inputs are built by
 this module rather than by hand.
 """
 
-import argparse
 import json
 import random
 import tempfile

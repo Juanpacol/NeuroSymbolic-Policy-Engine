@@ -1,7 +1,12 @@
 """Tests for nspe.logic.tnorm operator families."""
 
 import torch
-from torch.testing._internal.common_utils import TestCase, instantiate_parametrized_tests, parametrize, run_tests
+from torch.testing._internal.common_utils import (
+    TestCase,
+    instantiate_parametrized_tests,
+    parametrize,
+    run_tests,
+)
 
 from nspe.logic.ops import safe_log
 from nspe.logic.tnorm import get_tnorm
@@ -58,7 +63,9 @@ class TestTNormAlgebraicLaws(TestCase):
         tnorm = get_tnorm(name)
         log_x = _log(0.37)
         twice = tnorm.neg(tnorm.neg(log_x))
-        torch.testing.assert_close(twice.exp(), torch.tensor([[0.37]]), atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(
+            twice.exp(), torch.tensor([[0.37]]), atol=1e-4, rtol=1e-4
+        )
 
     @parametrize("name", ["product", "godel", "lukasiewicz"])
     def test_disj_pair_matches_disj_segment(self, name):

@@ -22,8 +22,16 @@ bench = ["clingo>=5.7", "pandas>=2.0"]
 train = ["open_clip_torch>=2.24", "pillow>=10.0", "datasets>=2.19", "huggingface_hub>=0.23"]
 dev = [
     "pytest>=8.0",
-    "ruff>=0.6",
-    "mypy>=1.10",
+    # Upper bounds so a new lint release cannot redden CI on an
+    # unrelated pull request.
+    "ruff>=0.6,<0.13",
+    "mypy>=1.10,<2.0",
+    # test_bench_cli and test_clingo_agreement import clingo without a
+    # guard, so without it here `pip install -e ".[dev]" && pytest`
+    # fails at collection. An importorskip would be worse: the
+    # agreement test is H2's core credibility artifact and must never
+    # be allowed to silently stop running.
+    "clingo>=5.7",
     "hypothesis>=6.100",
     "expecttest>=0.2",
     "numpy>=1.26",
@@ -41,6 +49,14 @@ target-version = "py310"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "D"]
 ignore = ["D203", "D213", "D107"]
+
+[tool.ruff.lint.per-file-ignores]
+# Test classes and methods document themselves through their names; the
+# docstrings that matter in `test/` are the module-level ones saying what
+# a file is defending against, and those stay required. E, F, I, UP and B
+# stay live on tests -- an unused import or a bare `zip` is as much a bug
+# there as anywhere.
+"test/**" = ["D100", "D101", "D102", "D103", "D104"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

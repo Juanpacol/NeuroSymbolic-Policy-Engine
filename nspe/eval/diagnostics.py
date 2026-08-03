@@ -89,7 +89,10 @@ def signature_distribution(
         rows.append(
             {
                 "signature": bits,
-                "active": [n for n, b in zip(names, bits) if b],
+                # strict: a name list that does not match the signature
+                # width would silently mislabel or truncate the active
+                # predicates, which is the whole content of this row.
+                "active": [n for n, b in zip(names, bits, strict=True) if b],
                 "count": int(counts[index].item()),
                 "share": counts[index].item() / total,
             }

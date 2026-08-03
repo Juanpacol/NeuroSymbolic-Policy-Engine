@@ -1,5 +1,4 @@
-"""Requires exact agreement between the fuzzy reasoner (crisp inputs)
-and Clingo's stable-model semantics.
+"""Requires exact fuzzy-reasoner agreement with Clingo on crisp inputs.
 
 This is the project's single most important credibility artifact for
 H2: if the fuzzy reasoner does not reproduce Clingo's answers on crisp
@@ -76,9 +75,11 @@ class TestClingoAgreesWithReasoner(TestCase):
 
 
 class TestInferVerdictsMatchesInfer(TestCase):
-    """The benchmark times ``infer_verdicts``; agreement is proved for
-    ``infer``. If the fast path ever diverged, the certified comparison
-    and the timed one would quietly come apart.
+    """The timed path and the certified path must not come apart.
+
+    The benchmark times ``infer_verdicts``, but agreement with Clingo is
+    proved for ``infer``. If the fast path ever diverged, the certified
+    comparison would no longer describe the one being measured.
     """
 
     def test_agreement_across_random_policies(self):
