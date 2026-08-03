@@ -171,12 +171,36 @@ def _encoder_of(model: nn.Module) -> nn.Module:
 
 
 def _cached_loaders(
-    model: nn.Module, preprocess: object, args: argparse.Namespace
-) -> tuple[DataLoader[Any], DataLoader[Any]]:
-    """Builds loaders over cached embeddings, encoding splits if needed."""
+    model: nn.Module,
+    preprocess: object,
+    args: argparse.Namespace,
+    splits: tuple[tuple[str, int | None], ...] | None = None,
+) -> list[DataLoader[Any]]:
+    """Builds loaders over cached embeddings, encoding splits if needed.
+
+    Args:
+        model: the model whose encoder produces the cached embeddings.
+        preprocess: the encoder's image transform.
+        args: this CLI's namespace.
+        splits: which ``(split, limit)`` pairs to build, in order;
+            defaults to train and validation. A caller that only needs
+            validation (``--epochs 0``, see :func:`train_one`) passes
+            just that, so the train split's images are never downloaded
+            or encoded at all -- building it eagerly encodes the whole
+            split via :func:`~nspe.train.cache.precompute_embeddings`,
+            which for the Hateful Memes mirror means fetching several
+            thousand images one at a time.
+
+    Returns:
+        One :class:`~torch.utils.data.DataLoader` per requested split,
+        in the same order.
+    """
     encoder = _encoder_of(model)
     loaders = []
-    for split, limit in (("train", args.limit_train), ("validation", args.limit_val)):
+    for split, limit in splits or (
+        ("train", args.limit_train),
+        ("validation", args.limit_val),
+    ):
         path = cache_path(args.cache_dir, split, args.clip_model, args.clip_pretrained)
         if not path.exists():
             from nspe.data.hateful_memes import HatefulMemesDataset
@@ -208,7 +232,7 @@ def _cached_loaders(
                 collate_fn=collate_embeddings,
             )
         )
-    return loaders[0], loaders[1]
+    return loaders
 
 
 def _require_both_classes(labels: Sequence[float], split: str, limit: int) -> None:
@@ -436,7 +460,17 @@ def train_one(args: argparse.Namespace) -> dict[str, Any]:
     model, preprocess = _build_model(args)
 
     if args.cache_dir is not None:
-        train_loader, val_loader = _cached_loaders(model, preprocess, args)
+        # With epochs=0 nothing ever iterates the train split, so
+        # requesting only validation here means it is never encoded --
+        # for the Hateful Memes mirror, building it eagerly would
+        # otherwise download several thousand images for nothing.
+        splits = (
+            (("validation", args.limit_val),)
+            if args.epochs == 0
+            else (("train", args.limit_train), ("validation", args.limit_val))
+        )
+        loaders = _cached_loaders(model, preprocess, args, splits=splits)
+        train_loader, val_loader = ([], loaders[0]) if args.epochs == 0 else loaders
         forward_fn = (
             _reasoner_forward_embedded
             if args.model == "reasoner"
@@ -448,8 +482,14 @@ def train_one(args: argparse.Namespace) -> dict[str, Any]:
             _reasoner_forward if args.model == "reasoner" else _baseline_forward
         )
 
-    base_rate, pos_weight = _warm_start(model, forward_fn, train_loader, args.device)
-    print(f"train base rate={base_rate:.4f} pos_weight={pos_weight:.3f}")
+    if args.epochs == 0:
+        # Nothing to warm-start a calibrator bias for.
+        base_rate, pos_weight = 0.5, 1.0
+    else:
+        base_rate, pos_weight = _warm_start(
+            model, forward_fn, train_loader, args.device
+        )
+        print(f"train base rate={base_rate:.4f} pos_weight={pos_weight:.3f}")
 
     result = train_model(
         model,
