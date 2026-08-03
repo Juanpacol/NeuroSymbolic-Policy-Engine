@@ -1,0 +1,100 @@
+# GENERATED -- do not edit by hand.
+#
+# Scrambled control for 'hateful_memes_policy', seed 0.
+# Reproduce with:
+#     python -m nspe.policy.scramble --policy <intact> --seed 0
+#
+# Rule graph, confidences and predicate descriptions are identical to
+# the intact policy; only which base predicate each rule reads changes.
+#
+# intact fingerprint:    5b0331e30842fd43e436b7a5f55369f5b8c2b0be11288fb66677146fdff53379
+# scrambled fingerprint: e32874b3b005c7ac9d549d91765a4b484d24723087d08a091d64ec03b6df3150
+#
+# Permutation:
+#     benign_context -> condemnation_context
+#     condemnation_context -> slur_present
+#     dehumanizing_comparison -> targets_protected_group
+#     mocking_tone -> benign_context
+#     slur_present -> mocking_tone
+#     targets_protected_group -> dehumanizing_comparison
+
+version: 1
+name: hateful_memes_policy_scrambled_s0
+source: https://transparency.meta.com/policies/community-standards/hate-speech/
+predicates:
+- name: slur_present
+  kind: base
+  modality: text
+  description: Text contains a recognized slur.
+- name: targets_protected_group
+  kind: base
+  modality: multimodal
+  description: 'Target has a protected characteristic (race, ethnicity, national origin, disability,
+    religion, caste, sexual orientation, sex, gender identity, or serious disease).
+
+    '
+- name: dehumanizing_comparison
+  kind: base
+  modality: multimodal
+  description: Content compares a person/group to non-human entities.
+- name: condemnation_context
+  kind: base
+  modality: text
+  description: Content quotes or condemns hate speech rather than using it.
+- name: mocking_tone
+  kind: base
+  modality: multimodal
+  description: 'Content frames its target with a derisive/mocking tone, independent of an
+    explicit slur or dehumanizing comparison.
+
+    '
+- name: benign_context
+  kind: base
+  modality: multimodal
+  description: 'Content is educational, newsworthy, or otherwise clearly non-hateful in intent
+    (collapses meta_community_standards.yaml''s separate educational_context and newsworthy
+    predicates into one, since Hateful Memes does not distinguish those two cases).
+
+    '
+- name: hate_speech_signal
+  kind: derived
+- name: hateful
+  kind: verdict
+rules:
+- id: HM_SLUR
+  head: hate_speech_signal
+  body:
+  - mocking_tone
+  - dehumanizing_comparison
+  unless:
+  - slur_present
+  - condemnation_context
+  confidence: 0.95
+  cite: Hate Speech, Tier 1
+- id: HM_DEHUMANIZE
+  head: hate_speech_signal
+  body:
+  - targets_protected_group
+  - dehumanizing_comparison
+  unless:
+  - slur_present
+  - condemnation_context
+  confidence: 0.9
+  cite: Hate Speech, Tier 1
+- id: HM_VERDICT_CORE
+  head: hateful
+  body:
+  - hate_speech_signal
+  unless:
+  - slur_present
+  confidence: 1.0
+  cite: Hate Speech, Tier 1
+- id: HM_VERDICT_MOCKING
+  head: hateful
+  body:
+  - benign_context
+  - dehumanizing_comparison
+  unless:
+  - slur_present
+  confidence: 0.7
+  cite: Hateful Memes task definition (this policy)
