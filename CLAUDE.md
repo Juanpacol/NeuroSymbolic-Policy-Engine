@@ -54,8 +54,9 @@ pipeline using a non-differentiable external rule engine (Prolog/ASP)?
 
 Full literature review lives in `docs/literature-review.md` (English). Do not duplicate
 its content here — read it for source details, citable claims, and how each source maps
-to H1/H2/H3. Known gap: no fuzzy-logic/t-norm-specific sources (e.g., Logic Tensor
-Networks) reviewed yet — needed before implementing the fuzzy reasoning layer itself.
+to H1/H2/H3. Fuzzy-logic/t-norm grounding (van Krieken et al. 2022; Marra et al. 2023)
+and Hateful-Memes-specific prior work (HateXplain, AAAI 2021; UMR, ACL 2024) are covered
+as sources 6-9.
 
 ## Code style and conventions
 
