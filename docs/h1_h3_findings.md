@@ -532,6 +532,41 @@ training erases it -- wiring was never where the advantage lived, at
 either end of training. What remains open is why the *learned* heads
 end up similarly informative under either wiring; see below.
 
+### The predicates are not collapsed copies of each other
+
+One candidate explanation for the null result is that the six base
+predicates end up so similar that swapping which one a rule reads
+changes little. `nspe/eval/diagnostics.py::predicate_stats` already
+records what settles this, and it is in every committed artifact -- no
+new run was needed, only reading `docs/results/h1_h3/results_*_s[0-9]
+.json` across all ten seeds.
+
+| predicate | activation_rate (val) | max abs. correlation (val) |
+|---|---|---|
+| slur_present | 0.570 ± 0.184 | 0.264 ± 0.063 |
+| targets_protected_group | 0.683 ± 0.070 | 0.344 ± 0.107 |
+| dehumanizing_comparison | 0.541 ± 0.202 | 0.257 ± 0.082 |
+| condemnation_context | 0.270 ± 0.090 | 0.308 ± 0.119 |
+| mocking_tone | 0.711 ± 0.115 | 0.434 ± 0.113 |
+| benign_context | 0.663 ± 0.111 | 0.436 ± 0.109 |
+
+`max_abs_correlation` is each predicate's largest absolute Pearson
+correlation against any *other* predicate. The largest mean is 0.44
+(`mocking_tone` / `benign_context`, a semantically plausible pair), and
+the single worst value across all six predicates and all ten seeds is
+0.64 on test. Activation rates all sit between 0.27 and 0.72, so no
+predicate is stuck on or off either.
+
+**This refutes predicate collapse, which is the strongest form of the
+"predicates are interchangeable" explanation** -- and it is worth
+stating precisely because collapse is exactly the failure this project
+already hit once (5 distinct signatures out of 64, see "The problem this
+fixed"). It does *not* refute the weaker version: predicates can be
+individually distinct and still each carry comparable information about
+the label, which would make most rewirings similarly informative.
+Distinguishing that needs the wiring sweep and the label-correlation
+numbers, below.
+
 ## What's still open
 
 - **Why scrambling doesn't hurt accuracy is narrower now, but still
