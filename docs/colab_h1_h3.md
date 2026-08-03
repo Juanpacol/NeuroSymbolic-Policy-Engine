@@ -267,7 +267,76 @@ result, which corrupts the headline number rather than merely losing
 the control — stop and check `policy_name` in the artifacts before
 reading anything else.
 
-### Cell 11 — download checkpoints and results
+### Cell 11 — zero-shot-only control (why doesn't scrambling hurt?)
+
+The scrambled-policy control (Cell 10) came back negative: after full
+training, intact and scrambled AUROC were statistically
+indistinguishable (`docs/h1_h3_findings.md`, "Scrambled-policy control:
+results"). One live explanation is that gradient descent *re-purposes*
+what each predicate head detects to fit whichever rules it's given --
+correct or scrambled -- eroding the wiring's own effect over training.
+This cell tests that directly, by comparing intact vs. scrambled
+**before any training happens at all**, i.e. right at the CLIP
+zero-shot-seeded initialization (`--epochs 0`, added for exactly this).
+
+This needs no held-out test-set discipline -- it is a mechanism check,
+not a headline claim -- so it only touches validation, and reuses one
+zero-shot baseline checkpoint per seed across intact and every
+scrambled policy (the baseline consumes the policy only for
+`num_predicates`, same as in Cell 10).
+
+```python
+POL = "/kaggle/working/nspe-repo/docs/results/h1_h3/policies_scrambled"
+
+for seed in range(10):
+    !{sys.executable} -m nspe.train.cli --model reasoner --epochs 0 \
+      --clip-model ViT-L-14 --clip-pretrained openai \
+      --cache-dir /kaggle/working/emb_cache --seed {seed} \
+      --out /kaggle/working/checkpoints/reasoner_zs_s{seed}.pt
+
+    !{sys.executable} -m nspe.train.cli --model baseline --epochs 0 \
+      --clip-model ViT-L-14 --clip-pretrained openai \
+      --cache-dir /kaggle/working/emb_cache --seed {seed} \
+      --out /kaggle/working/checkpoints/baseline_zs_s{seed}.pt
+
+    !{sys.executable} -m nspe.eval.cli \
+      --clip-model ViT-L-14 --cache-dir /kaggle/working/emb_cache \
+      --reasoner-checkpoint /kaggle/working/checkpoints/reasoner_zs_s{seed}.pt \
+      --baseline-checkpoint /kaggle/working/checkpoints/baseline_zs_s{seed}.pt \
+      --split validation --device cuda \
+      --out /kaggle/working/results_zs_val_s{seed}.json
+
+    policy = f"{POL}/hateful_memes_scrambled_s{seed}.yaml"
+    !{sys.executable} -m nspe.train.cli --model reasoner --policy {policy} --epochs 0 \
+      --clip-model ViT-L-14 --clip-pretrained openai \
+      --cache-dir /kaggle/working/emb_cache --seed {seed} \
+      --out /kaggle/working/checkpoints/reasoner_zs_scram_s{seed}.pt
+
+    !{sys.executable} -m nspe.eval.cli --policy {policy} \
+      --clip-model ViT-L-14 --cache-dir /kaggle/working/emb_cache \
+      --reasoner-checkpoint /kaggle/working/checkpoints/reasoner_zs_scram_s{seed}.pt \
+      --baseline-checkpoint /kaggle/working/checkpoints/baseline_zs_s{seed}.pt \
+      --split validation --device cuda \
+      --out /kaggle/working/results_zs_scram_val_s{seed}.json
+```
+
+No training loop runs -- each iteration is one CLIP text encode (the
+zero-shot residual) plus one validation pass, so all 10 seeds should
+finish in a couple of minutes even on a modest GPU. Compare
+`h3_explainability.reasoner.auroc` between
+`results_zs_val_s{seed}.json` and `results_zs_scram_val_s{seed}.json`
+per seed:
+
+- **If intact clearly beats scrambled here** (unlike after full
+  training), that supports the re-purposing hypothesis: the correct
+  wiring has a real advantage at init that training away erases.
+- **If intact and scrambled are already indistinguishable at
+  init**, the flat result after training isn't about re-purposing at
+  all -- it points instead to the base predicates being too correlated
+  with each other and the label, or too few (six), for a random
+  derangement to land on a genuinely uninformative wiring.
+
+### Cell 12 — download checkpoints and results
 
 ```python
 import shutil
