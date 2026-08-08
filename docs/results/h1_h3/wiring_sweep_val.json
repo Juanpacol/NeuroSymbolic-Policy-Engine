@@ -1,0 +1,702 @@
+{
+  "schema": 1,
+  "policy_name": "hateful_memes_policy",
+  "policy_fingerprint": "5b0331e30842fd43e436b7a5f55369f5b8c2b0be11288fb66677146fdff53379",
+  "verdict": "hateful",
+  "per_seed": [
+    {
+      "intact_auroc": 0.7232012180728011,
+      "all_permutations": {
+        "population": "all_permutations",
+        "count": 720,
+        "mean": 0.5041932480761055,
+        "std": 0.09386357298156331,
+        "min": 0.3335477550635003,
+        "max": 0.7232012180728011,
+        "spread": 0.3896534630093008
+      },
+      "derangements": {
+        "population": "derangements",
+        "count": 265,
+        "mean": 0.4664271022534433,
+        "std": 0.0797064883438124,
+        "min": 0.3335477550635003,
+        "max": 0.6533626835371323,
+        "spread": 0.319814928473632
+      },
+      "worst": {
+        "permutation": [
+          2,
+          3,
+          4,
+          1,
+          5,
+          0
+        ],
+        "mapping": {
+          "slur_present": "dehumanizing_comparison",
+          "targets_protected_group": "condemnation_context",
+          "dehumanizing_comparison": "mocking_tone",
+          "condemnation_context": "targets_protected_group",
+          "mocking_tone": "benign_context",
+          "benign_context": "slur_present"
+        },
+        "is_derangement": true,
+        "auroc": 0.3335477550635003
+      },
+      "best": {
+        "permutation": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "mapping": {
+          "slur_present": "slur_present",
+          "targets_protected_group": "targets_protected_group",
+          "dehumanizing_comparison": "dehumanizing_comparison",
+          "condemnation_context": "condemnation_context",
+          "mocking_tone": "mocking_tone",
+          "benign_context": "benign_context"
+        },
+        "is_derangement": false,
+        "auroc": 0.7232012180728011
+      },
+      "intact_rank": {
+        "strictly_below": 719,
+        "at_or_below": 720,
+        "total": 720
+      },
+      "source": "mu0_val_s0.json",
+      "num_examples": 831
+    },
+    {
+      "intact_auroc": 0.7076920353146688,
+      "all_permutations": {
+        "population": "all_permutations",
+        "count": 720,
+        "mean": 0.4975093063620963,
+        "std": 0.09167103205937836,
+        "min": 0.3468438695056891,
+        "max": 0.7077510504697606,
+        "spread": 0.36090718096407154
+      },
+      "derangements": {
+        "population": "derangements",
+        "count": 265,
+        "mean": 0.4596898430686817,
+        "std": 0.07655530898751983,
+        "min": 0.3471153392191115,
+        "max": 0.6379892356357113,
+        "spread": 0.29087389641659983
+      },
+      "worst": {
+        "permutation": [
+          0,
+          5,
+          4,
+          2,
+          3,
+          1
+        ],
+        "mapping": {
+          "slur_present": "slur_present",
+          "targets_protected_group": "benign_context",
+          "dehumanizing_comparison": "mocking_tone",
+          "condemnation_context": "dehumanizing_comparison",
+          "mocking_tone": "condemnation_context",
+          "benign_context": "targets_protected_group"
+        },
+        "is_derangement": false,
+        "auroc": 0.3468438695056891
+      },
+      "best": {
+        "permutation": [
+          2,
+          1,
+          0,
+          3,
+          4,
+          5
+        ],
+        "mapping": {
+          "slur_present": "dehumanizing_comparison",
+          "targets_protected_group": "targets_protected_group",
+          "dehumanizing_comparison": "slur_present",
+          "condemnation_context": "condemnation_context",
+          "mocking_tone": "mocking_tone",
+          "benign_context": "benign_context"
+        },
+        "is_derangement": false,
+        "auroc": 0.7077510504697606
+      },
+      "intact_rank": {
+        "strictly_below": 718,
+        "at_or_below": 719,
+        "total": 720
+      },
+      "source": "mu0_val_s1.json",
+      "num_examples": 831
+    },
+    {
+      "intact_auroc": 0.719648505736273,
+      "all_permutations": {
+        "population": "all_permutations",
+        "count": 720,
+        "mean": 0.5002572732900031,
+        "std": 0.10931988535782548,
+        "min": 0.3321727019498607,
+        "max": 0.7208465133846371,
+        "spread": 0.3886738114347764
+      },
+      "derangements": {
+        "population": "derangements",
+        "count": 265,
+        "mean": 0.4532583046571642,
+        "std": 0.08993133884536139,
+        "min": 0.3321727019498607,
+        "max": 0.6621146310372503,
+        "spread": 0.3299419290873896
+      },
+      "worst": {
+        "permutation": [
+          2,
+          5,
+          4,
+          1,
+          3,
+          0
+        ],
+        "mapping": {
+          "slur_present": "dehumanizing_comparison",
+          "targets_protected_group": "benign_context",
+          "dehumanizing_comparison": "mocking_tone",
+          "condemnation_context": "targets_protected_group",
+          "mocking_tone": "condemnation_context",
+          "benign_context": "slur_present"
+        },
+        "is_derangement": true,
+        "auroc": 0.3321727019498607
+      },
+      "best": {
+        "permutation": [
+          0,
+          1,
+          4,
+          3,
+          2,
+          5
+        ],
+        "mapping": {
+          "slur_present": "slur_present",
+          "targets_protected_group": "targets_protected_group",
+          "dehumanizing_comparison": "mocking_tone",
+          "condemnation_context": "condemnation_context",
+          "mocking_tone": "dehumanizing_comparison",
+          "benign_context": "benign_context"
+        },
+        "is_derangement": false,
+        "auroc": 0.7208465133846371
+      },
+      "intact_rank": {
+        "strictly_below": 716,
+        "at_or_below": 717,
+        "total": 720
+      },
+      "source": "mu0_val_s2.json",
+      "num_examples": 831
+    },
+    {
+      "intact_auroc": 0.7237264529531183,
+      "all_permutations": {
+        "population": "all_permutations",
+        "count": 720,
+        "mean": 0.5177555700470546,
+        "std": 0.10483823585779332,
+        "min": 0.34247084651338466,
+        "max": 0.7237264529531183,
+        "spread": 0.38125560643973366
+      },
+      "derangements": {
+        "population": "derangements",
+        "count": 265,
+        "mean": 0.4752324306315824,
+        "std": 0.09562472597268228,
+        "min": 0.34247084651338466,
+        "max": 0.6808342382323781,
+        "spread": 0.33836339171899343
+      },
+      "worst": {
+        "permutation": [
+          5,
+          2,
+          0,
+          1,
+          3,
+          4
+        ],
+        "mapping": {
+          "slur_present": "benign_context",
+          "targets_protected_group": "dehumanizing_comparison",
+          "dehumanizing_comparison": "slur_present",
+          "condemnation_context": "targets_protected_group",
+          "mocking_tone": "condemnation_context",
+          "benign_context": "mocking_tone"
+        },
+        "is_derangement": true,
+        "auroc": 0.34247084651338466
+      },
+      "best": {
+        "permutation": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "mapping": {
+          "slur_present": "slur_present",
+          "targets_protected_group": "targets_protected_group",
+          "dehumanizing_comparison": "dehumanizing_comparison",
+          "condemnation_context": "condemnation_context",
+          "mocking_tone": "mocking_tone",
+          "benign_context": "benign_context"
+        },
+        "is_derangement": false,
+        "auroc": 0.7237264529531183
+      },
+      "intact_rank": {
+        "strictly_below": 719,
+        "at_or_below": 720,
+        "total": 720
+      },
+      "source": "mu0_val_s3.json",
+      "num_examples": 831
+    },
+    {
+      "intact_auroc": 0.7223691043860063,
+      "all_permutations": {
+        "population": "all_permutations",
+        "count": 720,
+        "mean": 0.49166885514533476,
+        "std": 0.12322195685578863,
+        "min": 0.3140432463056513,
+        "max": 0.7223691043860063,
+        "spread": 0.40832585808035504
+      },
+      "derangements": {
+        "population": "derangements",
+        "count": 265,
+        "mean": 0.441271324513871,
+        "std": 0.09950431043411015,
+        "min": 0.3140432463056513,
+        "max": 0.6819201170860677,
+        "spread": 0.3678768707804164
+      },
+      "worst": {
+        "permutation": [
+          5,
+          2,
+          1,
+          0,
+          3,
+          4
+        ],
+        "mapping": {
+          "slur_present": "benign_context",
+          "targets_protected_group": "dehumanizing_comparison",
+          "dehumanizing_comparison": "targets_protected_group",
+          "condemnation_context": "slur_present",
+          "mocking_tone": "condemnation_context",
+          "benign_context": "mocking_tone"
+        },
+        "is_derangement": true,
+        "auroc": 0.3140432463056513
+      },
+      "best": {
+        "permutation": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "mapping": {
+          "slur_present": "slur_present",
+          "targets_protected_group": "targets_protected_group",
+          "dehumanizing_comparison": "dehumanizing_comparison",
+          "condemnation_context": "condemnation_context",
+          "mocking_tone": "mocking_tone",
+          "benign_context": "benign_context"
+        },
+        "is_derangement": false,
+        "auroc": 0.7223691043860063
+      },
+      "intact_rank": {
+        "strictly_below": 719,
+        "at_or_below": 720,
+        "total": 720
+      },
+      "source": "mu0_val_s4.json",
+      "num_examples": 831
+    },
+    {
+      "intact_auroc": 0.7171934752844531,
+      "all_permutations": {
+        "population": "all_permutations",
+        "count": 720,
+        "mean": 0.5066065498953465,
+        "std": 0.10217621651492582,
+        "min": 0.3415915207025164,
+        "max": 0.7172701949860725,
+        "spread": 0.37567867428355606
+      },
+      "derangements": {
+        "population": "derangements",
+        "count": 265,
+        "mean": 0.4674167752693986,
+        "std": 0.08913182778466715,
+        "min": 0.3415915207025164,
+        "max": 0.6888662008403758,
+        "spread": 0.34727468013785934
+      },
+      "worst": {
+        "permutation": [
+          2,
+          3,
+          0,
+          1,
+          5,
+          4
+        ],
+        "mapping": {
+          "slur_present": "dehumanizing_comparison",
+          "targets_protected_group": "condemnation_context",
+          "dehumanizing_comparison": "slur_present",
+          "condemnation_context": "targets_protected_group",
+          "mocking_tone": "benign_context",
+          "benign_context": "mocking_tone"
+        },
+        "is_derangement": true,
+        "auroc": 0.3415915207025164
+      },
+      "best": {
+        "permutation": [
+          2,
+          1,
+          0,
+          3,
+          4,
+          5
+        ],
+        "mapping": {
+          "slur_present": "dehumanizing_comparison",
+          "targets_protected_group": "targets_protected_group",
+          "dehumanizing_comparison": "slur_present",
+          "condemnation_context": "condemnation_context",
+          "mocking_tone": "mocking_tone",
+          "benign_context": "benign_context"
+        },
+        "is_derangement": false,
+        "auroc": 0.7172701949860725
+      },
+      "intact_rank": {
+        "strictly_below": 718,
+        "at_or_below": 719,
+        "total": 720
+      },
+      "source": "mu0_val_s5.json",
+      "num_examples": 831
+    },
+    {
+      "intact_auroc": 0.723490392332751,
+      "all_permutations": {
+        "population": "all_permutations",
+        "count": 720,
+        "mean": 0.4929067144164845,
+        "std": 0.10659941925007085,
+        "min": 0.31486945847693687,
+        "max": 0.723519899910297,
+        "spread": 0.4086504414333601
+      },
+      "derangements": {
+        "population": "derangements",
+        "count": 265,
+        "mean": 0.45117072705780265,
+        "std": 0.09239161927223025,
+        "min": 0.3148989660544828,
+        "max": 0.6813653746282046,
+        "spread": 0.36646640857372176
+      },
+      "worst": {
+        "permutation": [
+          4,
+          3,
+          2,
+          0,
+          5,
+          1
+        ],
+        "mapping": {
+          "slur_present": "mocking_tone",
+          "targets_protected_group": "condemnation_context",
+          "dehumanizing_comparison": "dehumanizing_comparison",
+          "condemnation_context": "slur_present",
+          "mocking_tone": "benign_context",
+          "benign_context": "targets_protected_group"
+        },
+        "is_derangement": false,
+        "auroc": 0.31486945847693687
+      },
+      "best": {
+        "permutation": [
+          2,
+          1,
+          0,
+          3,
+          4,
+          5
+        ],
+        "mapping": {
+          "slur_present": "dehumanizing_comparison",
+          "targets_protected_group": "targets_protected_group",
+          "dehumanizing_comparison": "slur_present",
+          "condemnation_context": "condemnation_context",
+          "mocking_tone": "mocking_tone",
+          "benign_context": "benign_context"
+        },
+        "is_derangement": false,
+        "auroc": 0.723519899910297
+      },
+      "intact_rank": {
+        "strictly_below": 718,
+        "at_or_below": 719,
+        "total": 720
+      },
+      "source": "mu0_val_s6.json",
+      "num_examples": 831
+    },
+    {
+      "intact_auroc": 0.7119529295122987,
+      "all_permutations": {
+        "population": "all_permutations",
+        "count": 720,
+        "mean": 0.48932905178383157,
+        "std": 0.10282900228667394,
+        "min": 0.3243767999622303,
+        "max": 0.7119529295122987,
+        "spread": 0.3875761295500684
+      },
+      "derangements": {
+        "population": "derangements",
+        "count": 265,
+        "mean": 0.44803201160171124,
+        "std": 0.08999179712947508,
+        "min": 0.3243767999622303,
+        "max": 0.6663578206883528,
+        "spread": 0.3419810207261225
+      },
+      "worst": {
+        "permutation": [
+          2,
+          3,
+          4,
+          0,
+          5,
+          1
+        ],
+        "mapping": {
+          "slur_present": "dehumanizing_comparison",
+          "targets_protected_group": "condemnation_context",
+          "dehumanizing_comparison": "mocking_tone",
+          "condemnation_context": "slur_present",
+          "mocking_tone": "benign_context",
+          "benign_context": "targets_protected_group"
+        },
+        "is_derangement": true,
+        "auroc": 0.3243767999622303
+      },
+      "best": {
+        "permutation": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "mapping": {
+          "slur_present": "slur_present",
+          "targets_protected_group": "targets_protected_group",
+          "dehumanizing_comparison": "dehumanizing_comparison",
+          "condemnation_context": "condemnation_context",
+          "mocking_tone": "mocking_tone",
+          "benign_context": "benign_context"
+        },
+        "is_derangement": false,
+        "auroc": 0.7119529295122987
+      },
+      "intact_rank": {
+        "strictly_below": 719,
+        "at_or_below": 720,
+        "total": 720
+      },
+      "source": "mu0_val_s7.json",
+      "num_examples": 831
+    },
+    {
+      "intact_auroc": 0.7170990510363061,
+      "all_permutations": {
+        "population": "all_permutations",
+        "count": 720,
+        "mean": 0.5116231905297727,
+        "std": 0.10400908384614724,
+        "min": 0.33185402011236487,
+        "max": 0.7171108540673244,
+        "spread": 0.3852568339549596
+      },
+      "derangements": {
+        "population": "derangements",
+        "count": 265,
+        "mean": 0.4685042798235871,
+        "std": 0.08912615232869105,
+        "min": 0.33185402011236487,
+        "max": 0.6824571549974033,
+        "spread": 0.35060313488503847
+      },
+      "worst": {
+        "permutation": [
+          5,
+          2,
+          4,
+          0,
+          3,
+          1
+        ],
+        "mapping": {
+          "slur_present": "benign_context",
+          "targets_protected_group": "dehumanizing_comparison",
+          "dehumanizing_comparison": "mocking_tone",
+          "condemnation_context": "slur_present",
+          "mocking_tone": "condemnation_context",
+          "benign_context": "targets_protected_group"
+        },
+        "is_derangement": true,
+        "auroc": 0.33185402011236487
+      },
+      "best": {
+        "permutation": [
+          2,
+          1,
+          0,
+          3,
+          4,
+          5
+        ],
+        "mapping": {
+          "slur_present": "dehumanizing_comparison",
+          "targets_protected_group": "targets_protected_group",
+          "dehumanizing_comparison": "slur_present",
+          "condemnation_context": "condemnation_context",
+          "mocking_tone": "mocking_tone",
+          "benign_context": "benign_context"
+        },
+        "is_derangement": false,
+        "auroc": 0.7171108540673244
+      },
+      "intact_rank": {
+        "strictly_below": 718,
+        "at_or_below": 719,
+        "total": 720
+      },
+      "source": "mu0_val_s8.json",
+      "num_examples": 831
+    },
+    {
+      "intact_auroc": 0.7280522638213494,
+      "all_permutations": {
+        "population": "all_permutations",
+        "count": 720,
+        "mean": 0.5092369946991274,
+        "std": 0.09164204448118983,
+        "min": 0.3587295217411831,
+        "max": 0.7280522638213494,
+        "spread": 0.36932274208016624
+      },
+      "derangements": {
+        "population": "derangements",
+        "count": 265,
+        "mean": 0.47057622397431614,
+        "std": 0.07105310187837907,
+        "min": 0.35882984750483926,
+        "max": 0.6239731363014022,
+        "spread": 0.2651432887965629
+      },
+      "worst": {
+        "permutation": [
+          4,
+          3,
+          2,
+          0,
+          5,
+          1
+        ],
+        "mapping": {
+          "slur_present": "mocking_tone",
+          "targets_protected_group": "condemnation_context",
+          "dehumanizing_comparison": "dehumanizing_comparison",
+          "condemnation_context": "slur_present",
+          "mocking_tone": "benign_context",
+          "benign_context": "targets_protected_group"
+        },
+        "is_derangement": false,
+        "auroc": 0.3587295217411831
+      },
+      "best": {
+        "permutation": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "mapping": {
+          "slur_present": "slur_present",
+          "targets_protected_group": "targets_protected_group",
+          "dehumanizing_comparison": "dehumanizing_comparison",
+          "condemnation_context": "condemnation_context",
+          "mocking_tone": "mocking_tone",
+          "benign_context": "benign_context"
+        },
+        "is_derangement": false,
+        "auroc": 0.7280522638213494
+      },
+      "intact_rank": {
+        "strictly_below": 719,
+        "at_or_below": 720,
+        "total": 720
+      },
+      "source": "mu0_val_s9.json",
+      "num_examples": 831
+    }
+  ],
+  "across_seeds": {
+    "mean_spread": 0.38553007412303486,
+    "std_spread": 0.014386212865880028,
+    "intact_minus_worst": {
+      "n": 10,
+      "mean_gap": 0.38539256881167083,
+      "num_positive": 10,
+      "statistic": 3.8539256881167083,
+      "p_value": 0.0009765625,
+      "alternative": "greater",
+      "min_achievable_p": 0.0009765625,
+      "num_permutations": 1024
+    }
+  }
+}

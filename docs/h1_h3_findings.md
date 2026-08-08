@@ -1,7 +1,7 @@
 # H1/H3 remediation: root causes, fixes, and first real results
 
-Snapshot as of the 10-seed held-out test run and scrambled-policy
-control. Read this before touching
+Snapshot as of the 10-seed held-out test run, the scrambled-policy
+control, and the exhaustive wiring sweep. Read this before touching
 `nspe/train/`, `nspe/eval/`, `nspe/consistency.py`, `nspe/extractor.py`,
 or `nspe/ablate/` -- it explains *why* those modules look the way they
 do, which their docstrings only partially cover.
@@ -188,55 +188,70 @@ number; AUROC is threshold-free and doesn't have this problem.
   checkpoints dropped to ~1MB. This is what made the Phase 4 sweep
   (21 runs) practical in one session.
 
-## Phase 4 ablations (3 seeds, ViT-L-14, validation split)
+## Phase 4 ablations (10 seeds, ViT-L-14, validation split)
 
-Ran via `nspe/ablate/cli.py` (see `docs/colab_h1_h3.md`, Cell 8) on
-Kaggle T4, commit `bb64261`. 18 reasoner runs + 3 shared baseline runs,
-full output in `ablations.json` (not checked in).
+Ran via `nspe/ablate/cli.py` (see `docs/colab_h1_h3.md`, Cells 6-7) on
+Kaggle T4. 70 reasoner runs (7 configs x 10 seeds) plus 2 shared
+baselines (one for the six reasoner-only configs, one capacity-matched
+baseline for `linear_probe`), full output in `ablations.json`.
+Supersedes an earlier 3-seed, 6-config version of this section.
 
-| config | AUROC | adjusted_consistency | num_classes |
-|---|---|---|---|
-| anchor_0.0 | 0.7193 ± 0.0078 | 0.6614 ± 0.1902 | 43.7 ± 7.6 |
-| anchor_0.03 | 0.7195 ± 0.0072 | 0.7085 ± 0.1637 | 46.7 ± 8.5 |
-| anchor_0.1 (default) | 0.7181 ± 0.0030 | 0.6462 ± 0.1419 | 55.7 ± 2.6 |
-| anchor_0.3 | 0.7157 ± 0.0044 | 0.6235 ± 0.0859 | 57.7 ± 4.2 |
-| learnable_confidence | 0.7186 ± 0.0023 | 0.5619 ± 0.1106 | 52.0 ± 3.6 |
-| pmean | 0.7176 ± 0.0086 | 0.7460 ± 0.2125 | 46.7 ± 3.3 |
+| config | reasoner AUROC | baseline AUROC | adjusted_consistency | num_classes |
+|---|---|---|---|---|
+| anchor_0.0 | 0.7183 ± 0.0067 | 0.6842 ± 0.0050 | 0.6610 ± 0.1392 | 44.2 ± 8.2 |
+| anchor_0.03 | 0.7186 ± 0.0065 | 0.6842 ± 0.0050 | 0.6744 ± 0.1154 | 47.4 ± 6.2 |
+| anchor_0.1 (default) | 0.7186 ± 0.0069 | 0.6842 ± 0.0050 | 0.6547 ± 0.1463 | 52.9 ± 4.1 |
+| anchor_0.3 | 0.7187 ± 0.0067 | 0.6842 ± 0.0050 | 0.5888 ± 0.1136 | 58.0 ± 2.9 |
+| learnable_confidence | 0.7193 ± 0.0069 | 0.6842 ± 0.0050 | 0.5957 ± 0.1372 | 51.7 ± 5.0 |
+| pmean | 0.7170 ± 0.0080 | 0.6842 ± 0.0050 | 0.7252 ± 0.1546 | 50.0 ± 5.1 |
+| **linear_probe** | **0.7052 ± 0.0019** | **0.6876 ± 0.0014** | **0.3335 ± 0.0372** | **33.9 ± 2.2** |
 
-Baseline AUROC across the shared 3 seeds: 0.673-0.685 (not shown per
-row; every config's gap is positive, [+0.024, +0.047]).
+**AUROC is robust to every reasoner-only ablation.** 0.717-0.719 across
+the six configurations that only touch the loss or aggregation, gap
+always positive against the shared baseline. None of these design
+choices -- dropping the anchor loss, learning rule confidences instead
+of using the policy's declared ones, switching aggregation to p-mean --
+moves the headline H3 number. The AUROC advantage is structural, not
+contingent on a specific regularizer weight or aggregation choice.
 
-**AUROC is robust to every ablation.** 0.716-0.720 across all six
-configurations, gap always positive against the shared baseline. None
-of these design choices -- dropping the anchor loss, learning rule
-confidences instead of using the policy's declared ones, switching
-aggregation to p-mean -- moves the headline H3 number. This is the
-result to lead with: the AUROC advantage is structural, not contingent
-on a specific regularizer weight or aggregation choice.
+**`linear_probe` is the one ablation that moves the number, and it is
+now the most important one.** Removing the nonlinear trunk from *both*
+arms (`hidden_dim: 0`) drops reasoner AUROC to 0.7052 -- below every one
+of the six configs above, and below the headline 10-seed result
+(0.7194 ± 0.0058) by a margin that clears significance on its own
+terms: paired by seed against the headline run, the drop is positive in
+**all 10 seeds** (`[0.0205, 0.0045, 0.0153, 0.0209, 0.0154, 0.0125,
+0.0165, 0.0048, 0.0124, 0.0201]`), p=0.00098, the exact floor at n=10.
+The baseline barely moves (0.6876 vs. 0.6842-0.6860 elsewhere -- if
+anything slightly *higher*), so this is not capacity leaking out of
+both arms symmetrically; the reasoner specifically loses ground when
+its nonlinearity is removed. This is the ablation that most directly
+supports the restated H3 claim from the scrambled-policy control,
+below: **the advantage is a fixed nonlinear aggregator at matched
+capacity**, and taking the nonlinearity away costs accuracy even though
+the wiring underneath is untouched.
 
-**`num_classes` increases monotonically with `lambda_anchor`**: 43.7 ->
-46.7 -> 55.7 -> 57.7 across {0, 0.03, 0.1, 0.3}. Std also drops sharply
-after 0.03 (7.6-8.5 -> 2.6-4.2). This directly validates the anchor
-loss's mechanism from Phase 1: supervision from the policy's own
-predicate descriptions measurably increases predicate diversity, and
-more of it makes the outcome more consistent across seeds, not just
-higher on average.
+**`linear_probe` also collapses `adjusted_consistency` and
+`num_classes` far below every other configuration** (0.334 vs.
+0.59-0.73; 33.9 vs. 44-58 distinct signatures). A linear map over six
+predicate degrees has less room to produce distinct combinations than a
+256-wide nonlinear trunk does, so this is expected, not a separate
+finding -- but it means H1's consistency advantage, not just H3's
+accuracy, depends on the nonlinear trunk being there.
 
-**`adjusted_consistency` is not resolved at 3 seeds.** Per-config means
-range 0.56-0.75, but stds (0.09-0.21) are large relative to the spread
-between configs -- e.g. `pmean`'s three seeds are `[0.449, 0.856,
-0.933]`. None of these differences should be read as "config X beats
-config Y" without more seeds. The one directional note worth a sentence
-in the paper: `learnable_confidence` has both the lowest mean (0.562)
-and the tightest spread (0.111) of the six, mildly suggesting that
-learning rule confidences trades away some consistency for stability --
-but this is a lead, not a finding.
+**`num_classes` increases monotonically with `lambda_anchor`** among
+the six reasoner-only configs: 44.2 -> 47.4 -> 52.9 -> 58.0 across
+{0, 0.03, 0.1, 0.3}. This directly validates the anchor loss's
+mechanism from Phase 1: supervision from the policy's own predicate
+descriptions measurably increases predicate diversity.
 
-**Do not read `anchor_0.1`'s numbers here as a rerun of the main
-5-seed result above.** Same configuration, different seeds (0-2 here
-vs. 0-4 there) and a smaller n, so the two AUROC figures (0.7181 here,
-0.7193 in the 5-seed table) agreeing closely is a mild positive check,
-not independent confirmation.
+**`adjusted_consistency` at 10 seeds still does not cleanly separate
+the six reasoner-only configs** -- means span 0.59-0.73 but stds
+(0.11-0.15) remain large relative to that spread. The one directional
+note still worth a sentence in the paper: `learnable_confidence` and
+`anchor_0.3` have the lowest means (0.596, 0.589) of the six, mildly
+suggesting each trades some consistency for something else (learned
+confidences; a larger anchor penalty) -- a lead, not a finding.
 
 ## Held-out test split (10 seeds, ViT-L-14)
 
@@ -567,26 +582,111 @@ the label, which would make most rewirings similarly informative.
 Distinguishing that needs the wiring sweep and the label-correlation
 numbers, below.
 
+### The predicates carry different amounts of label information
+
+`predicate_stats`'s `label_correlation` (point-biserial against the
+real label, added alongside the wiring sweep) settles the second half
+of the collapse question: the six predicates are not just distinct from
+each other, they carry visibly different amounts of information about
+the verdict.
+
+| predicate | label_correlation (val, 10 seeds) |
+|---|---|
+| targets_protected_group | +0.2219 ± 0.0637 |
+| condemnation_context | -0.2259 ± 0.0467 |
+| benign_context | -0.1373 ± 0.0309 |
+| slur_present | +0.1056 ± 0.0391 |
+| mocking_tone | +0.1056 ± 0.0276 |
+| dehumanizing_comparison | +0.0265 ± 0.0728 |
+
+`targets_protected_group` and `condemnation_context` carry roughly
+eight times the signal `dehumanizing_comparison` does. If a random
+derangement mostly landed on "comparably informative combinations",
+that spread would need to be small -- it is not. This makes the
+"predicates are interchangeable" explanation for the scrambled-policy
+control's null result look unlikely on its own terms, and sets up the
+wiring sweep below to test the same question directly rather than by
+proxy.
+
+## The exhaustive wiring sweep: it is not that wiring doesn't matter
+
+The scrambled-policy control retrained on **one** random derangement
+per seed and found no cost. With six base predicates there are only
+720 wirings total (265 of them derangements), so rather than search for
+a harder one, `nspe/eval/wiring_sweep.py` scores **all of them**,
+holding the *trained* predicate layer fixed. This is the sweep the
+"targeted adversarial scramble" in the previous version of this section
+called for -- except exhaustive rather than targeted, since the space
+is small enough to enumerate.
+
+Ten seeds, validation split, `mu0` dumped from the intact-policy
+checkpoints already trained for the headline result
+(`docs/colab_h1_h3.md` Cell 12, `--dump-mu0`). Each dump reproduces its
+seed's committed `results_val_s*.json` AUROC exactly -- the built-in
+consistency check that the dump, the sweep, and the original eval agree.
+
+| | value |
+|---|---|
+| intact AUROC (mean of the 10 seeds' own intact row) | 0.7194 |
+| mean AUROC over all 720 wirings | 0.5042 ± ~0.01 (near chance) |
+| mean AUROC over the 265 derangements only | 0.4664 (**below** chance) |
+| mean spread (max - min AUROC within a seed) | **0.3855 ± 0.0144** |
+| worst wiring's AUROC, averaged over seeds | ~0.336 |
+| intact vs. worst, one-sided sign test (n=10) | **p = 0.00098**, the exact floor, 10/10 seeds positive |
+
+**With the predicate layer frozen, the wiring matters enormously.**
+Intact sits at the top of its own 720-wiring distribution by
+construction -- the layer was trained on it, so that rank is expected
+and not itself evidence of anything. What is evidence is the
+**spread**: the average wiring is indistinguishable from a coin flip,
+the average *derangement* somehow does worse than a coin flip, and the
+single worst wiring per seed lands at 0.33 AUROC -- meaningfully below
+chance, i.e. actively anti-informative. None of that is close to the
+picture the retrained scrambled-policy control shows, where intact and
+scrambled are statistically indistinguishable (p=0.40 validation, 0.16
+test, from that section above).
+
+**Putting the two results together answers the open question.** The
+wiring is not powerless -- a frozen predicate layer is highly sensitive
+to which predicate a rule reads, exactly as the differing
+`label_correlation`s above would predict. What erases that sensitivity
+is retraining: gradient descent reshapes what each predicate *head*
+detects to fit whichever wiring it is handed, correct or scrambled,
+until the aggregate signal recovers to intact-level accuracy regardless
+of the permutation. The scrambled-policy control's null result is
+therefore not evidence that the policy's rule structure is
+unimportant -- it is evidence that this reasoner's predicate layer is
+flexible enough to absorb an arbitrary rewiring during training. The
+wiring *would* matter to a system that could not retrain its predicate
+layer against it -- e.g. a deployment that ships fixed, pre-trained
+predicate heads and only swaps the policy on top.
+
+This resolves the question this document has carried since the
+scrambled-policy control: it is not that the rules carry no
+information (the sweep shows the opposite), and it is not primarily
+that six predicates are too few or too correlated (the label
+correlations above are visibly unequal, so a random derangement is
+not "safely landing on an equivalent combination" by luck) -- it is
+that gradient descent on the predicate layer is doing more of the
+representational work than the fixed rule wiring is, whenever both are
+allowed to co-adapt.
+
+Artifacts: `docs/results/h1_h3/mu0_val_s{0..9}.json` (the frozen input)
+and `wiring_sweep_val.json` (the 7200-row sweep and its summary),
+reproducible with `python -m nspe.eval.wiring_sweep` and no GPU.
+
 ## What's still open
 
-- **Why scrambling doesn't hurt accuracy is narrower now, but still
-  open.** The zero-shot diagnostic above rules out one explanation
-  (training erasing an initial wiring advantage -- there was none to
-  erase) but not the others: the base predicates may be correlated
-  enough with each other and with the label that most derangements land
-  on comparably-informative combinations once trained; the rule
-  confidences and t-conorm aggregation may dominate over which specific
-  predicate sits in which slot; or six predicates may simply be too few
-  for a random derangement to land on a genuinely uninformative wiring.
-  Distinguishing these would need either a larger/more heterogeneous
-  predicate set or a targeted adversarial scramble (worst-case
-  derangement, not a random one), neither attempted here.
 - **A controlled test of the backbone-dependence hypothesis** for H1
   (ViT-L-14 vs. ViT-B-32 findings above), if it's worth pursuing further
   than the observational finding already recorded.
-- **More seeds on `adjusted_consistency` per ablation config**, if the
-  anchor-loss trend on that metric specifically (not just `num_classes`)
-  is worth nailing down for the paper.
+- **Whether retraining on the single worst wiring (rather than a random
+  derangement) also recovers to intact-level AUROC.** The wiring
+  sweep's mechanism -- gradient descent reshapes the predicate heads to
+  fit whatever wiring they are given -- predicts it would, making this
+  a confirmatory experiment rather than one that could still overturn
+  the conclusion above. Deferred for that reason; the worst-case mapping
+  per seed is already recorded in `wiring_sweep_val.json` if it is run.
 - **Test split on ViT-B-32.** Only ViT-L-14 was evaluated on test, by
   design (see the remediation plan) -- extending the backbone
   comparison to test is unblocked but not done.

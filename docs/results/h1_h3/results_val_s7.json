@@ -4,7 +4,7 @@
     "python_version": "3.12.13",
     "platform": "Linux-6.12.90+-x86_64-with-glibc2.35",
     "device": "cuda",
-    "git_commit": "be60221"
+    "git_commit": "2eae846"
   },
   "policy_name": "hateful_memes_policy",
   "policy_fingerprint": "5b0331e30842fd43e436b7a5f55369f5b8c2b0be11288fb66677146fdff53379",
@@ -229,37 +229,43 @@
         "mean": 0.7108843326568604,
         "std": 0.2215418815612793,
         "activation_rate": 0.8122743964195251,
-        "max_abs_correlation": 0.24094659090042114
+        "max_abs_correlation": 0.24094659090042114,
+        "label_correlation": 0.15087683498859406
       },
       "targets_protected_group": {
         "mean": 0.6747519373893738,
         "std": 0.3577176034450531,
         "activation_rate": 0.6895306706428528,
-        "max_abs_correlation": 0.31971976161003113
+        "max_abs_correlation": 0.31971976161003113,
+        "label_correlation": 0.2283513993024826
       },
       "dehumanizing_comparison": {
         "mean": 0.6200672388076782,
         "std": 0.20826487243175507,
         "activation_rate": 0.7099879384040833,
-        "max_abs_correlation": 0.24094659090042114
+        "max_abs_correlation": 0.24094659090042114,
+        "label_correlation": 0.11424249410629272
       },
       "condemnation_context": {
         "mean": 0.1847088783979416,
         "std": 0.2697237432003021,
         "activation_rate": 0.13237063586711884,
-        "max_abs_correlation": 0.31971976161003113
+        "max_abs_correlation": 0.31971976161003113,
+        "label_correlation": -0.2502390444278717
       },
       "mocking_tone": {
         "mean": 0.5964117646217346,
         "std": 0.34872451424598694,
         "activation_rate": 0.6161251664161682,
-        "max_abs_correlation": 0.4403378963470459
+        "max_abs_correlation": 0.4403378963470459,
+        "label_correlation": 0.08831650763750076
       },
       "benign_context": {
         "mean": 0.58286452293396,
         "std": 0.37284281849861145,
         "activation_rate": 0.6052948236465454,
-        "max_abs_correlation": 0.4403378963470459
+        "max_abs_correlation": 0.4403378963470459,
+        "label_correlation": -0.15472859144210815
       }
     },
     "signature_distribution": [
