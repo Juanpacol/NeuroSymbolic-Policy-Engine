@@ -20,9 +20,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import torch
-from torch import Tensor, nn
+from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
 
+from nspe.extractor import Encoder
 from nspe.train.dataset import collate_hateful_memes
 
 
@@ -50,7 +51,7 @@ def cache_path(
 
 
 def precompute_embeddings(
-    encoder: nn.Module,
+    encoder: Encoder,
     dataset: Dataset[dict[str, object]],
     path: str | Path,
     batch_size: int = 32,

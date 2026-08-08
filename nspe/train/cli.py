@@ -30,17 +30,17 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from typing import Any, cast
 
 import torch
 from torch import Tensor, nn
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader, Dataset, Subset
 
 from nspe.baselines.neural_classifier import NeuralBaselineClassifier
 from nspe.calibration import VerdictCalibrator
 from nspe.engine import PolicyEngine
-from nspe.extractor import NeuroSymbolicLayer
+from nspe.extractor import Encoder, NeuroSymbolicLayer, Preprocess
 from nspe.policy.loader import load_policy
 from nspe.reasoner import PolicyKGReasoner
 from nspe.train.cache import (
@@ -60,6 +60,11 @@ from nspe.train.regularizers import (
 from nspe.train.seed import set_seed
 
 _VERDICT_NAME = "hateful"
+# What train_model's forward_fn parameter expects; the four concrete
+# functions below are each narrower in their first argument, which
+# Callable's parameter contravariance means is not directly assignable
+# -- see where each is cast to this at its point of use in train_one.
+_ForwardFn = Callable[[nn.Module, Tensor, Any], Tensor]
 
 
 def _verdict_of(out: object) -> Tensor:
@@ -91,7 +96,7 @@ def _baseline_forward_embedded(
     return model.forward_embedded(fused)
 
 
-def _build_model(args: argparse.Namespace) -> tuple[nn.Module, object]:
+def _build_model(args: argparse.Namespace) -> tuple[nn.Module, Preprocess]:
     """Builds the model under test and its CLIP preprocessing transform.
 
     Both arms are sized from the same policy so their trunk and latent
@@ -148,7 +153,7 @@ def _make_aux_loss(
 
     extractor = model.extractor
 
-    def aux(engine: nn.Module, inputs: Tensor, side: object) -> Tensor:
+    def aux(engine: nn.Module, inputs: Tensor, side: Any) -> Tensor:
         # The cached path hands over fused embeddings directly; the raw
         # path hands over images that still need encoding.
         fused = inputs if args.cache_dir is not None else extractor.encode(inputs, side)
@@ -166,13 +171,16 @@ def _make_aux_loss(
     return aux
 
 
-def _encoder_of(model: nn.Module) -> nn.Module:
-    return model.extractor if isinstance(model, PolicyEngine) else model
+def _encoder_of(model: nn.Module) -> Encoder:
+    # Both branches satisfy Encoder structurally (NeuroSymbolicLayer and
+    # NeuralBaselineClassifier each define .preprocess/.encode), but
+    # model's own type here is the broader nn.Module the two arms share.
+    return cast(Encoder, model.extractor if isinstance(model, PolicyEngine) else model)
 
 
 def _cached_loaders(
     model: nn.Module,
-    preprocess: object,
+    preprocess: Preprocess,
     args: argparse.Namespace,
     splits: tuple[tuple[str, int | None], ...] | None = None,
 ) -> list[DataLoader[Any]]:
@@ -263,18 +271,19 @@ def _require_both_classes(labels: Sequence[float], split: str, limit: int) -> No
 
 
 def _raw_loaders(
-    preprocess: object, args: argparse.Namespace
+    preprocess: Preprocess, args: argparse.Namespace
 ) -> tuple[DataLoader[Any], DataLoader[Any]]:
     """Builds loaders that encode images on the fly, every epoch."""
     from nspe.data.hateful_memes import HatefulMemesDataset
 
     loaders = []
     for split, limit in (("train", args.limit_train), ("validation", args.limit_val)):
-        dataset = HatefulMemesDataset(split=split, transform=preprocess)
+        full_dataset = HatefulMemesDataset(split=split, transform=preprocess)
+        dataset: Dataset[Any] = full_dataset
         if limit is not None:
-            kept = min(limit, len(dataset))
-            _require_both_classes(dataset.labels()[:kept], split, limit)
-            dataset = Subset(dataset, range(kept))
+            kept = min(limit, len(full_dataset))
+            _require_both_classes(full_dataset.labels()[:kept], split, limit)
+            dataset = Subset(full_dataset, range(kept))
         loaders.append(
             DataLoader(
                 dataset,
@@ -293,8 +302,8 @@ def _calibrator_of(model: nn.Module) -> VerdictCalibrator | None:
 @torch.no_grad()
 def _warm_start(
     model: nn.Module,
-    forward_fn: object,
-    loader: DataLoader[Any],
+    forward_fn: _ForwardFn,
+    loader: Iterable[tuple[Tensor, Any, Tensor]],
     device: str,
 ) -> tuple[float, float]:
     """Fits the calibrator bias to the training base rate.
@@ -308,7 +317,8 @@ def _warm_start(
     Args:
         model: the model about to be trained.
         forward_fn: the batch-to-verdict callable used in training.
-        loader: the training loader.
+        loader: the training loader, or an empty iterable if there is no
+            training to warm-start for (``--epochs 0``).
         device: device to run the pass on.
 
     Returns:
@@ -459,6 +469,10 @@ def train_one(args: argparse.Namespace) -> dict[str, Any]:
     set_seed(args.seed)
     model, preprocess = _build_model(args)
 
+    train_loader: Iterable[tuple[Tensor, Any, Tensor]]
+    val_loader: DataLoader[Any]
+    forward_fn: _ForwardFn
+
     if args.cache_dir is not None:
         # With epochs=0 nothing ever iterates the train split, so
         # requesting only validation here means it is never encoded --
@@ -470,16 +484,21 @@ def train_one(args: argparse.Namespace) -> dict[str, Any]:
             else (("train", args.limit_train), ("validation", args.limit_val))
         )
         loaders = _cached_loaders(model, preprocess, args, splits=splits)
-        train_loader, val_loader = ([], loaders[0]) if args.epochs == 0 else loaders
-        forward_fn = (
+        if args.epochs == 0:
+            train_loader, val_loader = [], loaders[0]
+        else:
+            train_loader, val_loader = loaders
+        forward_fn = cast(
+            _ForwardFn,
             _reasoner_forward_embedded
             if args.model == "reasoner"
-            else _baseline_forward_embedded
+            else _baseline_forward_embedded,
         )
     else:
         train_loader, val_loader = _raw_loaders(preprocess, args)
-        forward_fn = (
-            _reasoner_forward if args.model == "reasoner" else _baseline_forward
+        forward_fn = cast(
+            _ForwardFn,
+            _reasoner_forward if args.model == "reasoner" else _baseline_forward,
         )
 
     if args.epochs == 0:

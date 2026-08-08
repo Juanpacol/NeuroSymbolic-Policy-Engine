@@ -20,15 +20,81 @@ predicate splits the batch.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterator
+from typing import Any, Protocol, cast
+
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
 from nspe.trunk import PredicateHead
 
+# open_clip ships no type stubs, so a constructed model/tokenizer is
+# seen as Any; these describe just the surface this module relies on,
+# so a caller who casts an open_clip object to one gets real checking
+# on every attribute actually used below.
+Preprocess = Callable[[Any], Any]
+ClipTokenizer = Callable[[list[str]], Tensor]
+
+
+class _ClipVisualTower(Protocol):
+    """The subset of open_clip's visual tower this module reads."""
+
+    output_dim: int
+
+
+class ClipModel(Protocol):
+    """The open_clip model surface `_clip_fused_embedding` depends on."""
+
+    visual: _ClipVisualTower
+
+    def encode_image(self, images: Tensor) -> Tensor:
+        """Encodes a preprocessed image batch into CLIP's visual space."""
+        ...
+
+    def encode_text(self, tokens: Tensor) -> Tensor:
+        """Encodes tokenized text into CLIP's shared embedding space."""
+        ...
+
+    def parameters(self) -> Iterator[nn.Parameter]:
+        """Yields the model's parameters, for the freeze-on-load loop."""
+        ...
+
+    def eval(self) -> ClipModel:
+        """Switches to inference mode; returns self, as `nn.Module` does."""
+        ...
+
+
+class Encoder(Protocol):
+    """The frozen-CLIP-encoder interface `precompute_embeddings` needs.
+
+    Both :class:`NeuroSymbolicLayer` and
+    :class:`~nspe.baselines.neural_classifier.NeuralBaselineClassifier`
+    satisfy this structurally, which is what lets one cache-building
+    function serve either arm.
+    """
+
+    preprocess: Preprocess
+
+    def encode(self, images: Tensor, texts: list[str]) -> Tensor:
+        """Encodes a preprocessed image/text batch into a fused embedding."""
+        ...
+
+    def to(self, device: str) -> Encoder:
+        """Moves the encoder to `device`; returns self, as `nn.Module` does."""
+        ...
+
+    def eval(self) -> Encoder:
+        """Switches to inference mode; returns self, as `nn.Module` does."""
+        ...
+
+    def parameters(self) -> Iterator[nn.Parameter]:
+        """Yields the encoder's parameters."""
+        ...
+
 
 def _clip_fused_embedding(
-    clip: nn.Module, tokenizer: object, images: Tensor, texts: list[str]
+    clip: ClipModel, tokenizer: ClipTokenizer, images: Tensor, texts: list[str]
 ) -> Tensor:
     """Encodes preprocessed images and raw text into a fused CLIP embedding.
 
@@ -97,13 +163,13 @@ class NeuroSymbolicLayer(nn.Module):
         )
         tokenizer = open_clip.get_tokenizer(model_name)
 
-        self.clip = clip_model
+        self.clip: ClipModel = cast(ClipModel, clip_model)
         for param in self.clip.parameters():
             param.requires_grad = False
         self.clip.eval()
 
-        self.preprocess = preprocess
-        self.tokenizer = tokenizer
+        self.preprocess: Preprocess = preprocess
+        self.tokenizer: ClipTokenizer = cast(ClipTokenizer, tokenizer)
         self.predicate_names = predicate_names
         self.mu_eps = mu_eps
 
@@ -233,7 +299,8 @@ class NeuroSymbolicLayer(nn.Module):
             Tensor of shape ``(batch, len(predicate_names))``, values in
             ``[mu_eps, 1 - mu_eps]``.
         """
-        return self.head(fused)
+        # nn.Module.__call__ is typed to return Any.
+        return cast(Tensor, self.head(fused))
 
     def forward(self, images: Tensor, texts: list[str]) -> Tensor:
         """Produces base predicate truth degrees for a batch.

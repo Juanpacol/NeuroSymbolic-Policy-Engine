@@ -18,11 +18,13 @@ measured was confounded.
 
 from __future__ import annotations
 
+from typing import cast
+
 import torch
 from torch import Tensor, nn
 
 from nspe.calibration import VerdictCalibrator
-from nspe.extractor import _clip_fused_embedding
+from nspe.extractor import ClipModel, ClipTokenizer, Preprocess, _clip_fused_embedding
 from nspe.trunk import PredicateHead
 
 
@@ -58,13 +60,13 @@ class NeuralBaselineClassifier(nn.Module):
         )
         tokenizer = open_clip.get_tokenizer(model_name)
 
-        self.clip = clip_model
+        self.clip: ClipModel = cast(ClipModel, clip_model)
         for param in self.clip.parameters():
             param.requires_grad = False
         self.clip.eval()
 
-        self.preprocess = preprocess
-        self.tokenizer = tokenizer
+        self.preprocess: Preprocess = preprocess
+        self.tokenizer: ClipTokenizer = cast(ClipTokenizer, tokenizer)
 
         fused_dim = self.clip.visual.output_dim * 2
         self.head = PredicateHead(
