@@ -30,6 +30,10 @@ with), `reasoner_product` (the deployed configuration), and `clingo`.
 | `h2_cuda_synthetic_b10_r20.json` | `python -m nspe.bench.cli --device cuda --synthetic 10 20 --batch-sizes 1 64 1024 --warmup 20 --reps 200 --clingo-budget-s 30` | Same cloud T4 |
 | `h2_cuda_synthetic_b50_r200.json` | `python -m nspe.bench.cli --device cuda --synthetic 50 200 --batch-sizes 1 64 1024 --warmup 20 --reps 200 --clingo-budget-s 30` | Same cloud T4 |
 | `h2_cuda_synthetic_b100_r1000.json` | `python -m nspe.bench.cli --device cuda --synthetic 100 1000 --batch-sizes 1 64 1024 --warmup 20 --reps 200 --clingo-budget-s 30` | Same cloud T4 |
+| `h2_cuda_meta_crossover.json`, `h2_cpu_meta_crossover.json` | `python -m nspe.bench.cli --device {cuda,cpu} --batch-sizes 64 128 256 512 --warmup 20 --reps 200 --clingo-budget-s 30` -- locates the CPU/GPU crossover precisely (between batch 256 and 512), filling the gap the coarser `h2_{cuda,cpu}_meta*.json` sweeps above left between 64 and 1024. | Kaggle T4 |
+| `h2_cuda_synthetic_b70_r500.json` | `python -m nspe.bench.cli --device cuda --synthetic 70 500 --batch-sizes 1 64 1024 --warmup 20 --reps 200 --clingo-budget-s 30` -- the point between `b50_r200` and `b100_r1000` that locates the rule-base-scaling peak; it turns out to be the true peak (180.7x), past `b50_r200`'s 177.7x. | Kaggle T4 |
+| `h2_cuda_synthetic_b100_r1000_fill.json` | `python -m nspe.bench.cli --device cuda --synthetic 100 1000 --batch-sizes 8 128 256 512 --warmup 20 --reps 200 --clingo-budget-s 30` -- fills in `h2_cuda_synthetic_b100_r1000.json`'s batch axis (originally only 1, 64, 1024) to show the fall-back from peak is a smooth bend, not a sharp knee. | Kaggle T4 |
+| `h2_cpu_synthetic_b100_r1000.json` | `python -m nspe.bench.cli --device cpu --synthetic 100 1000 --batch-sizes 1 64 256 1024 --warmup 20 --reps 200 --clingo-budget-s 30` -- answers whether the CPU/GPU crossover moves with policy size. It does: CUDA already leads by batch 64 on this larger policy, unlike the meta policy's 256-512 crossover. | Kaggle T4 |
 
 ## H1/H3 — consistency and accuracy (`h1_h3/`)
 

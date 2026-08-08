@@ -1,0 +1,179 @@
+{
+  "schema_version": 2,
+  "environment": {
+    "torch_version": "2.10.0+cu128",
+    "clingo_version": "5.8.1",
+    "python_version": "3.12.13",
+    "platform": "Linux-6.12.90+-x86_64-with-glibc2.35",
+    "device": "cpu",
+    "git_commit": "2eae846"
+  },
+  "policy_name": "meta_community_standards_hate_speech",
+  "policy_fingerprint": "89eb27db373e6939c6625d74dabebf6f73e4d486393ad47f5de277eef6c35996",
+  "results": [
+    {
+      "batch_size": 64,
+      "reasoner_product": {
+        "device": "cpu",
+        "batch_size": 64,
+        "warmup": 20,
+        "reps": 200,
+        "median_ms": 1.6509970426559448,
+        "p95_ms": 2.0736262798309326,
+        "p99_ms": 3.3765299320220947,
+        "mean_ms": 1.7110522985458374,
+        "throughput_per_sec": 38764.45465767991,
+        "per_item_median_ms": 0.025796828791499138
+      },
+      "reasoner_crisp": {
+        "device": "cpu",
+        "batch_size": 64,
+        "warmup": 20,
+        "reps": 200,
+        "median_ms": 1.1782920360565186,
+        "p95_ms": 1.4404364824295044,
+        "p99_ms": 1.658499002456665,
+        "mean_ms": 1.1988611221313477,
+        "throughput_per_sec": 54315.906448959606,
+        "per_item_median_ms": 0.018410813063383102
+      },
+      "clingo": {
+        "device": "cpu",
+        "batch_size": 64,
+        "warmup": 0,
+        "reps": 200,
+        "median_ms": 4.3821940422058105,
+        "p95_ms": 4.802277565002441,
+        "p99_ms": 5.180477142333984,
+        "mean_ms": 4.440343856811523,
+        "throughput_per_sec": 14604.55638969951,
+        "per_item_median_ms": 0.06847178190946579
+      },
+      "speedup_median_crisp": 3.7191069005881086,
+      "speedup_median_product": 2.6542712851600343
+    },
+    {
+      "batch_size": 128,
+      "reasoner_product": {
+        "device": "cpu",
+        "batch_size": 128,
+        "warmup": 20,
+        "reps": 200,
+        "median_ms": 1.8446439504623413,
+        "p95_ms": 2.178178310394287,
+        "p99_ms": 2.485013723373413,
+        "mean_ms": 1.8702611923217773,
+        "throughput_per_sec": 69390.08471955691,
+        "per_item_median_ms": 0.014411280862987041
+      },
+      "reasoner_crisp": {
+        "device": "cpu",
+        "batch_size": 128,
+        "warmup": 20,
+        "reps": 200,
+        "median_ms": 1.3322739601135254,
+        "p95_ms": 1.5443389415740967,
+        "p99_ms": 1.8327561616897583,
+        "mean_ms": 1.3536996841430664,
+        "throughput_per_sec": 96076.33552268251,
+        "per_item_median_ms": 0.010408390313386917
+      },
+      "clingo": {
+        "device": "cpu",
+        "batch_size": 128,
+        "warmup": 0,
+        "reps": 200,
+        "median_ms": 8.729903221130371,
+        "p95_ms": 9.367012977600098,
+        "p99_ms": 9.99769401550293,
+        "mean_ms": 8.813084602355957,
+        "throughput_per_sec": 14662.247307642685,
+        "per_item_median_ms": 0.06820236891508102
+      },
+      "speedup_median_crisp": 6.552633679327096,
+      "speedup_median_product": 4.732568157091947
+    },
+    {
+      "batch_size": 256,
+      "reasoner_product": {
+        "device": "cpu",
+        "batch_size": 256,
+        "warmup": 20,
+        "reps": 200,
+        "median_ms": 2.47993803024292,
+        "p95_ms": 2.872701406478882,
+        "p99_ms": 3.0540616512298584,
+        "mean_ms": 2.5063064098358154,
+        "throughput_per_sec": 103228.38590241861,
+        "per_item_median_ms": 0.009687257930636406
+      },
+      "reasoner_crisp": {
+        "device": "cpu",
+        "batch_size": 256,
+        "warmup": 20,
+        "reps": 200,
+        "median_ms": 1.710008978843689,
+        "p95_ms": 2.065826892852783,
+        "p99_ms": 2.455972671508789,
+        "mean_ms": 1.7391546964645386,
+        "throughput_per_sec": 149706.81626075885,
+        "per_item_median_ms": 0.00667972257360816
+      },
+      "clingo": {
+        "device": "cpu",
+        "batch_size": 256,
+        "warmup": 0,
+        "reps": 200,
+        "median_ms": 17.769474029541016,
+        "p95_ms": 20.107324600219727,
+        "p99_ms": 26.801652908325195,
+        "mean_ms": 18.151826858520508,
+        "throughput_per_sec": 14406.729179176074,
+        "per_item_median_ms": 0.06941200792789459
+      },
+      "speedup_median_crisp": 10.391450717151653,
+      "speedup_median_product": 7.165289540642442
+    },
+    {
+      "batch_size": 512,
+      "reasoner_product": {
+        "device": "cpu",
+        "batch_size": 512,
+        "warmup": 20,
+        "reps": 200,
+        "median_ms": 3.3863348960876465,
+        "p95_ms": 3.948425054550171,
+        "p99_ms": 4.173532485961914,
+        "mean_ms": 3.441145658493042,
+        "throughput_per_sec": 151195.91408148434,
+        "per_item_median_ms": 0.0066139353439211845
+      },
+      "reasoner_crisp": {
+        "device": "cpu",
+        "batch_size": 512,
+        "warmup": 20,
+        "reps": 200,
+        "median_ms": 2.161468029022217,
+        "p95_ms": 2.4292707443237305,
+        "p99_ms": 2.613619565963745,
+        "mean_ms": 2.167177200317383,
+        "throughput_per_sec": 236876.04587499425,
+        "per_item_median_ms": 0.004221617244184017
+      },
+      "clingo": {
+        "device": "cpu",
+        "batch_size": 512,
+        "warmup": 0,
+        "reps": 200,
+        "median_ms": 35.20703125,
+        "p95_ms": 38.96514892578125,
+        "p99_ms": 42.09444046020508,
+        "mean_ms": 35.78178787231445,
+        "throughput_per_sec": 14542.549650504827,
+        "per_item_median_ms": 0.06876373291015625
+      },
+      "speedup_median_crisp": 16.288481151362024,
+      "speedup_median_product": 10.396795453006122
+    }
+  ]
+}

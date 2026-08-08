@@ -69,6 +69,23 @@ deployment doing single-case, low-latency inference should not assume
 GPU is faster by default — it depends on the batch size actually
 achievable in production.
 
+**The crossover, located precisely: between batch 256 and 512, on the
+meta policy.** A denser sweep (`--batch-sizes 64 128 256 512`) fills in
+the gap the coarse table above left between 64 and 1024:
+
+| batch | CPU per-item (ms) | CUDA per-item (ms) |
+|---|---|---|
+| 64 | 0.0184 | 0.0330 |
+| 128 | 0.0104 | 0.0165 |
+| 256 | 0.0067 | 0.0083 |
+| 512 | **0.0042** | **0.0041** |
+
+CPU stays ahead through 256, and the two are within rounding error of
+each other at 512 (CUDA a hair faster). The crossover is not a wide
+band — it is a narrow window right around batch 512 on this policy and
+this T4 instance, not "somewhere in 64-1024" as the coarser sweep could
+only bracket.
+
 ### Rule-base scaling: the advantage has a ceiling, not an open-ended climb
 
 Three synthetic policies, same T4, `--batch-sizes 1 64 1024`:
@@ -99,9 +116,45 @@ down. The reasoner remains overwhelmingly faster (151.6x) at the
 largest policy tested, but "the advantage grows without bound as the
 rule base grows" is not the claim these three points support — the
 honest claim is that it grows, peaks, and then gives some back once
-real compute enters the picture. A denser sweep between `b50_r200` and
-`b100_r1000` (e.g. `b70_r500`) would locate that inflection point more
-precisely, if it is worth pinning down for the paper.
+real compute enters the picture.
+
+**The peak sits past `b50_r200`, not at it.** `b70_r500` (70 base
+predicates, 500 rules), the point in between the three already
+committed, was run to locate the inflection precisely:
+
+| policy | speedup @ batch 1024 | reasoner_crisp @ batch 1024 (ms) | clingo @ batch 1024 (ms) |
+|---|---|---|---|
+| b10_r20 | 42.7x | 2.249 | 96.02 |
+| b50_r200 | 177.7x | 2.456 | 436.52 |
+| **b70_r500** | **180.7x (true peak)** | 3.747 | 676.98 |
+| b100_r1000 | 151.6x | 8.042 | 1219.48 |
+
+`b70_r500` edges out `b50_r200` (180.7x vs. 177.7x) rather than
+sitting between it and `b100_r1000`'s fallen-back 151.6x. Clingo's cost
+keeps climbing roughly linearly with the rule count (436 -> 677 ->
+1219 ms), while the reasoner's latency is still only creeping up
+(2.456 -> 3.747 ms) at 70 rules -- still inside the near-flat,
+launch-overhead-bound regime, so the *ratio* keeps improving a little
+further before the reasoner's own compute cost catches up and the
+curve bends down by `b100_r1000`. The peak is a genuine local maximum
+around 500-700 rules on this hardware, not a smooth monotonic decline
+starting immediately after `b50_r200`.
+
+**Filling in `b100_r1000`'s batch axis (previously only 1, 64, 1024)
+shows the bend is smooth, not a sharp knee:**
+
+| batch | speedup (crisp) |
+|---|---|
+| 8 | 2.77x |
+| 128 | 47.7x |
+| 256 | 91.6x |
+| 512 | 160.8x |
+| 1024 | 151.6x |
+
+Speedup climbs smoothly through 512 and only turns over between 512
+and 1024 -- consistent with launch-overhead-bound behavior giving way
+gradually to compute-bound behavior as batch size grows, not a discrete
+regime switch at one particular batch size.
 
 ## Why the crisp arm is the one to lead with
 
@@ -114,23 +167,32 @@ should say precisely that, anchored to the crisp-arm numbers (the
 certified-equivalent computation), rather than quoting the product
 arm's larger number without the batch axis attached.
 
-## Open questions
+## Open questions (resolved)
 
-1. **Exactly where does the CPU/GPU crossover sit?** Bracketed between
-   batch 64 and 1024 on the meta policy; a finer sweep (`--batch-sizes
-   64 128 256 512`) would locate it precisely, which matters if a real
-   deployment's batch size falls in that range.
-2. **Exactly where does the rule-base-scaling inflection sit?** Bounded
-   between `b50_r200` (still flat) and `b100_r1000` (no longer flat) at
-   batch 1024; a policy in between (e.g. `b70_r500`) would locate it
-   precisely, and points at more batch sizes for `b100_r1000` (only 1,
-   64, 1024 were run) would show whether the inflection is a smooth
-   bend or a sharper knee.
-3. **Does the CPU/GPU crossover point move with policy size?** Since
-   `b100_r1000`'s reasoner latency is no longer launch-overhead-bound at
-   large batch, its CPU/GPU crossover batch size may differ from the
-   meta policy's — untested; only CUDA was run on the synthetic
-   policies.
+All three were open in the previous version of this document; all
+three are now answered by the sweeps in the two sections above.
+
+1. **Exactly where does the CPU/GPU crossover sit?** Between batch 256
+   and 512 on the meta policy — CPU still ahead at 256 (0.0067ms vs.
+   0.0083ms per-item), the two within rounding error at 512. Resolved,
+   not just bracketed.
+2. **Exactly where does the rule-base-scaling inflection sit?** The
+   true peak is `b70_r500` (180.7x), past `b50_r200` (177.7x) rather
+   than at it — the climb continues a little further than the original
+   three points suggested before falling back at `b100_r1000`
+   (151.6x). Filling in `b100_r1000`'s batch axis (8, 128, 256, 512)
+   shows the fall-back is a smooth bend through batch 512-1024, not a
+   sharp knee at one specific batch size.
+3. **Does the CPU/GPU crossover point move with policy size? Yes,
+   substantially.** On `b100_r1000`, CUDA already leads at batch 64
+   (0.0499ms vs. CPU's 0.2979ms per-item) and the gap widens to ~40x by
+   batch 1024 (0.0079ms vs. 0.3165ms) — nowhere near the meta policy's
+   256-512 crossover. A larger rule base pushes the crossover down to
+   much smaller batch sizes, because CPU's per-rule cost scales worse
+   with rule count than the GPU's parallel-across-rules cost does. A
+   deployment with a large policy should default to GPU even at modest
+   batch sizes; the "CPU wins below ~512" rule of thumb from the meta
+   policy does **not** transfer to a larger rule base.
 
 ## Threats to validity
 
@@ -174,9 +236,11 @@ Every one of these should survive into the paper's methods section.
 6. **Single-threaded Clingo.** Multi-shot single-solver is the standard
    deployment, so this is the right baseline, but it is worth stating
    that no attempt was made to parallelize it across cores.
-7. **The rule-base scaling sweep has only 3 points and 3 batch sizes
-   each.** Enough to see the advantage peak and then partially reverse
-   (see above), not enough to characterize the inflection precisely.
+7. **The rule-base scaling sweep now has 4 points, one with 5 batch
+   sizes -- still not a dense characterization.** Enough to locate the
+   true peak (`b70_r500`) and see the fall-back through `b100_r1000`'s
+   batch axis is a smooth bend, but the space between `b70_r500` and
+   `b100_r1000` and beyond `b100_r1000` remains unsampled.
 8. **GPU launch overhead is instance-specific.** The ~2.1ms floor
    reflects this T4 instance's kernel launch and synchronization cost;
    a different GPU (or a warmer/cooler thermal/scheduling state on a
