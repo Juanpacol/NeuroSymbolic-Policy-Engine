@@ -62,7 +62,12 @@ ignore = ["D203", "D213", "D107"]
 convention = "google"
 
 [tool.mypy]
-python_version = "3.10"
+# No python_version pin: numpy's own shipped stubs use syntax gated on
+# the *running* interpreter's version, and pinning this below it (this
+# project supports 3.10+) makes mypy reject numpy's stubs on a newer
+# interpreter. The CPU-only pytest matrix in CI already exercises real
+# 3.10 behavior; this check is static and gains nothing from a lower
+# floor.
 strict = true
 files = ["nspe"]
 

@@ -49,7 +49,13 @@ class HatefulMemesDataset(Dataset[dict[str, Any]]):
         split: str = "train",
         transform: Callable[[Image.Image], Any] | None = None,
     ) -> None:
-        from datasets import load_dataset  # type: ignore[import-not-found]
+        # The specific error code depends on whether `datasets` (a
+        # `train`-extra dependency) is installed in the checking
+        # environment: import-not-found if absent, import-untyped if
+        # present but unstubbed. A bare ignore covers both without
+        # `warn_unused_ignores` (part of strict mode) flagging whichever
+        # one didn't fire.
+        from datasets import load_dataset  # type: ignore
 
         hf_split = load_dataset(_REPO_ID)[split]
         available = _available_image_files()
