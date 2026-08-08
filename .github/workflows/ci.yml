@@ -41,3 +41,17 @@ jobs:
       - run: pip install torch --index-url https://download.pytorch.org/whl/cpu
       - run: pip install -e ".[dev]"
       - run: pytest -q
+
+  mypy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+      # train's extras (pillow, in particular) are needed too: PIL.Image
+      # is imported at module level in nspe/data/hateful_memes.py, so
+      # mypy --strict needs it installed to type-check that file at all.
+      - run: pip install -e ".[dev,train]"
+      - run: mypy nspe/
